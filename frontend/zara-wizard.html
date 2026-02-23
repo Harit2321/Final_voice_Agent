@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zara — Setup Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --black:   #080808;
+      --surface: #0f0f0f;
+      --card:    #141414;
+      --border:  #1e1e1e;
+      --gold:    #c9a84c;
+      --gold-lt: #e8c97a;
+      --gold-dk: #8a6b2a;
+      --muted:   #4a4a4a;
+      --text:    #d4d4d4;
+      --white:   #f5f0e8;
+      --error:   #c0392b;
+      --font-display: 'Cormorant Garamond', serif;
+      --font-body:    'Outfit', sans-serif;
+      --font-mono:    'DM Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--black);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.65;
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+      opacity: 0.03; pointer-events: none; z-index: 9999;
+    }
+
+    /* Ambient glow */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -10%; left: 50%;
+      transform: translateX(-50%);
+      width: 800px; height: 500px;
+      background: radial-gradient(ellipse, rgba(201,168,76,0.05) 0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── LAYOUT ──────────────────────────────────────── */
+    .wizard-wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── WIZARD NAV ──────────────────────────────────── */
+    .wnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 48px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,8,8,0.9);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .wnav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--white);
+      text-decoration: none;
+    }
+    .logo-dot {
+      width: 7px; height: 7px;
+      background: var(--gold);
+      border-radius: 50%;
+      animation: pulse-dot 2.4s ease-in-out infinite;
+    }
+    .wnav-agent {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+    .wnav-agent strong {
+      color: var(--gold);
+      font-size: 14px;
+      font-family: var(--font-display);
+      font-weight: 400;
+      letter-spacing: 0.05em;
+    }
+    .wnav-back {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+    .wnav-back:hover { color: var(--text); }
+
+    /* ─── STEPPER ─────────────────────────────────────── */
+    .stepper-bar {
+      padding: 28px 48px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .stepper {
+      display: flex;
+      align-items: center;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .stepper-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      cursor: pointer;
+    }
+    .stepper-step.clickable:hover .step-bubble { border-color: var(--gold); }
+
+    .step-bubble {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--card);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+      transition: all 0.35s;
+      position: relative;
+      z-index: 1;
+    }
+    .stepper-step.active .step-bubble {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: rgba(201,168,76,0.08);
+      box-shadow: 0 0 0 4px rgba(201,168,76,0.08), 0 0 20px rgba(201,168,76,0.12);
+    }
+    .stepper-step.done .step-bubble {
+      border-color: var(--gold-dk);
+      background: var(--gold-dk);
+      color: var(--black);
+      font-size: 14px;
+    }
+    .step-name {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+      transition: color 0.3s;
+    }
+    .stepper-step.active .step-name { color: var(--gold); }
+    .stepper-step.done .step-name { color: var(--text); }
+
+    .stepper-connector {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+      margin: 0 4px;
+      margin-bottom: 22px;
+      transition: background 0.4s;
+      position: relative;
+      overflow: hidden;
+    }
+    .stepper-connector::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--gold-dk), var(--gold));
+      transition: width 0.5s ease;
+    }
+    .stepper-connector.filled::after { width: 100%; }
+
+    /* ─── STEP BODY ───────────────────────────────────── */
+    .step-body {
+      flex: 1;
+      padding: 52px 48px 80px;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .step-panel { display: none; animation: fadeIn 0.35s ease both; }
+    .step-panel.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes fadeInLeft {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .step-panel.going-back { animation: fadeInLeft 0.35s ease both; }
+
+    .step-header { margin-bottom: 36px; }
+    .step-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-tag::before { content: ''; display: block; width: 20px; height: 1px; background: var(--gold); }
+    .step-title {
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 300;
+      color: var(--white);
+      line-height: 1.05;
+      margin-bottom: 8px;
+    }
+    .step-title em { font-style: italic; color: var(--gold-lt); }
+    .step-subtitle { font-size: 14px; color: var(--muted); max-width: 520px; }
+
+    /* ─── FORM ELEMENTS ───────────────────────────────── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-group.full { grid-column: 1 / -1; }
+
+    label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold-dk);
+    }
+    input[type="text"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="email"],
+    input[type="number"],
+    input[type="time"],
+    select,
+    textarea {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--white);
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 12px 16px;
+      outline: none;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      appearance: none;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--gold-dk);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.06);
+    }
+    input::placeholder, textarea::placeholder { color: var(--muted); }
+    textarea { resize: vertical; min-height: 90px; }
+    select { cursor: pointer; }
+    select option { background: var(--card); }
+    input[type="time"] { color-scheme: dark; }
+    .input-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ─── VOICE CARDS ─────────────────────────────────── */
+    .voice-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .voice-card {
+      padding: 20px 16px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.25s;
+      position: relative;
+    }
+    .voice-card:hover { border-color: var(--gold-dk); background: rgba(201,168,76,0.03); }
+    .voice-card.selected {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.06);
+    }
+    .voice-card.selected::after {
+      content: '✓';
+      position: absolute;
+      top: 8px; right: 10px;
+      font-size: 11px;
+      color: var(--gold);
+    }
+    .voice-avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+    }
+    .voice-name { font-size: 13px; color: var(--white); font-weight: 500; }
+    .voice-style { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+    /* ─── SERVICES ────────────────────────────────────── */
+    .services-header {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 36px;
+      gap: 10px;
+      padding: 0 0 8px 16px;
+      margin-bottom: 4px;
+    }
+    .services-header span {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .services-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .service-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 36px;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      animation: slideIn 0.3s ease both;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .service-row input { padding: 8px 12px; font-size: 13px; }
+    .btn-remove {
+      width: 36px; height: 36px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-remove:hover { border-color: var(--error); color: var(--error); }
+    .btn-add {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 22px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .btn-add:hover { border-color: var(--gold-dk); color: var(--gold); }
+
+    /* ─── SCHEDULE ────────────────────────────────────── */
+    .schedule-table {
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .schedule-head {
+      display: grid;
+      grid-template-columns: 120px 1fr 1fr 64px;
+      gap: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+    }
+    .schedule-head span {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .schedule-head span:last-child { text-align: center; }
+    .schedule-row {
+      display: grid;
+      grid-template-columns: 120px 1fr 1fr 64px;
+      gap: 0;
+      align-items: center;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+    .schedule-row:last-child { border-bottom: none; }
+    .schedule-row:hover { background: rgba(255,255,255,0.01); }
+    .day-name { font-size: 13px; color: var(--text); }
+    .schedule-row input[type="time"] { padding: 8px 10px; font-size: 13px; margin-right: 12px; }
+
+    /* Toggle */
+    .toggle-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .toggle {
+      position: relative;
+      width: 40px; height: 22px;
+      cursor: pointer;
+      display: inline-block;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .track {
+      position: absolute; inset: 0;
+      background: var(--border);
+      border-radius: 22px;
+      transition: background 0.3s;
+    }
+    .thumb {
+      position: absolute;
+      top: 4px; left: 4px;
+      width: 14px; height: 14px;
+      background: var(--muted);
+      border-radius: 50%;
+      transition: all 0.3s;
+    }
+    .toggle input:checked ~ .track { background: var(--gold-dk); }
+    .toggle input:checked ~ .thumb { transform: translateX(18px); background: var(--gold); }
+
+    /* ─── REVIEW ──────────────────────────────────────── */
+    .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .review-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 24px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+    .review-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--gold-dk), transparent);
+    }
+    .review-card.full { grid-column: 1 / -1; }
+    .review-card-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+    .review-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(30,30,30,0.7);
+      gap: 20px;
+    }
+    .review-row:last-child { border-bottom: none; }
+    .rkey { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+    .rval { font-size: 13px; color: var(--white); font-weight: 500; text-align: right; }
+
+    .launch-info {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 18px 22px;
+      background: rgba(201,168,76,0.04);
+      border: 1px solid rgba(201,168,76,0.12);
+      margin-top: 16px;
+    }
+    .launch-info p { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+
+    /* ─── STEP FOOTER ─────────────────────────────────── */
+    .step-footer {
+      position: sticky;
+      bottom: 0;
+      background: rgba(8,8,8,0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 20px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 40;
+    }
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .btn-back-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-back-step:hover { color: var(--text); border-color: var(--text); }
+    .step-indicator {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+    .step-indicator strong { color: var(--gold); }
+
+    .btn-next-step {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 36px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dk) 100%);
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-next-step::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .btn-next-step:hover::after { opacity: 1; }
+    .btn-next-step:hover { transform: translateY(-1px); box-shadow: 0 10px 32px rgba(201,168,76,0.22); }
+
+    /* ─── SUCCESS ─────────────────────────────────────── */
+    #success-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      text-align: center;
+      padding: 60px 48px;
+      animation: fadeIn 0.6s ease both;
+    }
+    .success-ring {
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      border: 1px solid var(--gold-dk);
+      background: rgba(201,168,76,0.05);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      margin-bottom: 28px;
+      animation: pulse-gold 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-gold {
+      0%,100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.2); }
+      50%      { box-shadow: 0 0 0 16px rgba(201,168,76,0); }
+    }
+    .success-title {
+      font-family: var(--font-display);
+      font-size: 54px;
+      font-weight: 300;
+      color: var(--white);
+      line-height: 1.05;
+      margin-bottom: 12px;
+    }
+    .success-title em { font-style: italic; color: var(--gold-lt); }
+    .success-sub { font-size: 15px; color: var(--muted); max-width: 420px; margin: 0 auto 36px; line-height: 1.7; }
+
+    .agent-id-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 28px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--gold);
+      letter-spacing: 0.1em;
+      margin-bottom: 36px;
+    }
+    .agent-id-label { font-size: 10px; color: var(--muted); letter-spacing: 0.16em; }
+
+    .success-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-success-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 36px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dk) 100%);
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-success-ghost {
+      padding: 13px 28px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-success-ghost:hover { border-color: var(--gold-dk); color: var(--gold); }
+
+    /* ─── ANIMATIONS ─────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(201,168,76,0.3); }
+      50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(201,168,76,0); }
+    }
+
+    @media (max-width: 800px) {
+      .wnav, .stepper-bar, .step-body, .step-footer { padding-left: 24px; padding-right: 24px; }
+      .stepper { overflow-x: auto; padding-bottom: 4px; }
+      .step-name { display: none; }
+      .form-grid { grid-template-columns: 1fr; }
+      .voice-grid { grid-template-columns: repeat(2, 1fr); }
+      .review-grid { grid-template-columns: 1fr; }
+      .step-title { font-size: 32px; }
+      .schedule-head, .schedule-row { grid-template-columns: 100px 1fr 1fr 52px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wizard-wrap">
+
+  <!-- TOP NAV -->
+  <nav class="wnav">
+    <a class="wnav-logo" href="zara-dashboard.html">
+      <div class="logo-dot"></div> Zara
+    </a>
+    <div class="wnav-agent">
+      Setting up agent: <strong id="navAgentName">—</strong>
+    </div>
+    <a class="wnav-back" href="zara-dashboard.html">
+      ← Dashboard
+    </a>
+  </nav>
+
+  <!-- STEPPER -->
+  <div class="stepper-bar" id="stepperBar">
+    <div class="stepper">
+      <div class="stepper-step active clickable" data-step="1" onclick="jumpTo(1)">
+        <div class="step-bubble" id="b1">01</div>
+        <div class="step-name">Identity</div>
+      </div>
+      <div class="stepper-connector" id="c1"></div>
+      <div class="stepper-step clickable" data-step="2" onclick="jumpTo(2)">
+        <div class="step-bubble" id="b2">02</div>
+        <div class="step-name">Business</div>
+      </div>
+      <div class="stepper-connector" id="c2"></div>
+      <div class="stepper-step clickable" data-step="3" onclick="jumpTo(3)">
+        <div class="step-bubble" id="b3">03</div>
+        <div class="step-name">Services</div>
+      </div>
+      <div class="stepper-connector" id="c3"></div>
+      <div class="stepper-step clickable" data-step="4" onclick="jumpTo(4)">
+        <div class="step-bubble" id="b4">04</div>
+        <div class="step-name">Schedule</div>
+      </div>
+      <div class="stepper-connector" id="c4"></div>
+      <div class="stepper-step clickable" data-step="5" onclick="jumpTo(5)">
+        <div class="step-bubble" id="b5">05</div>
+        <div class="step-name">Review</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP PANELS -->
+  <div class="step-body">
+
+    <!-- ── STEP 1: IDENTITY ───────────────────────────── -->
+    <div class="step-panel active" id="step-1">
+      <div class="step-header">
+        <div class="step-tag">Step 1 of 5</div>
+        <h2 class="step-title">Agent <em>Identity</em></h2>
+        <p class="step-subtitle">Your agent's name and voice persona — this is what customers will experience on every call.</p>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Agent Name</label>
+          <input type="text" id="f-agentName" placeholder="e.g. Aria, Nova, James…" />
+          <p class="input-hint">What your customers will call this agent</p>
+        </div>
+        <div class="form-group">
+          <label>Call Language</label>
+          <select id="f-lang">
+            <option>English (US)</option>
+            <option>English (UK)</option>
+            <option>Hindi</option>
+            <option>Spanish</option>
+            <option>French</option>
+            <option>Arabic</option>
+            <option>Portuguese</option>
+            <option>German</option>
+            <option>Japanese</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Opening Greeting</label>
+          <textarea id="f-greeting" placeholder="e.g. Hi! I'm Aria from Luxe Studio. How can I help you today?"></textarea>
+          <p class="input-hint">The first thing your agent says when a call connects</p>
+        </div>
+        <div class="form-group full">
+          <label>Voice Persona</label>
+          <div class="voice-grid">
+            <div class="voice-card selected" data-voice="aria" onclick="selectVoice(this)">
+              <div class="voice-avatar">👩</div>
+              <div class="voice-name">Aria</div>
+              <div class="voice-style">Warm · Professional</div>
+            </div>
+            <div class="voice-card" data-voice="nova" onclick="selectVoice(this)">
+              <div class="voice-avatar">👱‍♀️</div>
+              <div class="voice-name">Nova</div>
+              <div class="voice-style">Crisp · Confident</div>
+            </div>
+            <div class="voice-card" data-voice="james" onclick="selectVoice(this)">
+              <div class="voice-avatar">👨</div>
+              <div class="voice-name">James</div>
+              <div class="voice-style">Deep · Trustworthy</div>
+            </div>
+            <div class="voice-card" data-voice="kai" onclick="selectVoice(this)">
+              <div class="voice-avatar">🧑</div>
+              <div class="voice-name">Kai</div>
+              <div class="voice-style">Energetic · Friendly</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: BUSINESS ───────────────────────────── -->
+    <div class="step-panel" id="step-2">
+      <div class="step-header">
+        <div class="step-tag">Step 2 of 5</div>
+        <h2 class="step-title">Business <em>Details</em></h2>
+        <p class="step-subtitle">Help your agent understand your business so it can answer customer questions correctly.</p>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Business Name</label>
+          <input type="text" id="f-bizName" placeholder="e.g. Luxe Hair Studio" />
+        </div>
+        <div class="form-group">
+          <label>Industry</label>
+          <select id="f-industry">
+            <option>Salon & Beauty</option>
+            <option>Medical Clinic</option>
+            <option>Dental Office</option>
+            <option>Yoga / Fitness Studio</option>
+            <option>Law Firm</option>
+            <option>Veterinary</option>
+            <option>Spa & Wellness</option>
+            <option>Auto Service</option>
+            <option>Real Estate</option>
+            <option>Restaurant</option>
+            <option>Photography</option>
+            <option>Home Services</option>
+            <option>Education / Tutoring</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Business Phone</label>
+          <input type="tel" id="f-phone" placeholder="+91 98765 43210" />
+        </div>
+        <div class="form-group full">
+          <label>Business Address</label>
+          <input type="text" id="f-address" placeholder="Street, City, State, ZIP" />
+        </div>
+        <div class="form-group">
+          <label>Website (optional)</label>
+          <input type="url" id="f-website" placeholder="https://yourbusiness.com" />
+        </div>
+        <div class="form-group">
+          <label>Appointment Slot Duration</label>
+          <select id="f-slot">
+            <option>15 minutes</option>
+            <option>20 minutes</option>
+            <option selected>30 minutes</option>
+            <option>45 minutes</option>
+            <option>60 minutes</option>
+            <option>90 minutes</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Special Agent Instructions</label>
+          <textarea id="f-instructions" placeholder="e.g. Always confirm customer name. Ask for allergy info before beauty services. Mention free parking…"></textarea>
+          <p class="input-hint">Anything the agent should always say or know</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: SERVICES ───────────────────────────── -->
+    <div class="step-panel" id="step-3">
+      <div class="step-header">
+        <div class="step-tag">Step 3 of 5</div>
+        <h2 class="step-title">Your <em>Services</em></h2>
+        <p class="step-subtitle">Define every service you offer — the agent will present, explain, and book these precisely.</p>
+      </div>
+
+      <div class="services-header">
+        <span>Service Name</span>
+        <span>Duration</span>
+        <span>Price</span>
+        <span></span>
+      </div>
+
+      <div class="services-list" id="servicesList">
+        <div class="service-row">
+          <input type="text" placeholder="e.g. Haircut & Styling" value="Haircut & Styling" />
+          <input type="text" placeholder="45 min" value="45 min" />
+          <input type="text" placeholder="₹800" value="₹800" />
+          <button class="btn-remove" onclick="removeService(this)" title="Remove">✕</button>
+        </div>
+        <div class="service-row">
+          <input type="text" placeholder="e.g. Hair Coloring" value="Hair Coloring" />
+          <input type="text" placeholder="90 min" value="90 min" />
+          <input type="text" placeholder="₹2500" value="₹2500" />
+          <button class="btn-remove" onclick="removeService(this)" title="Remove">✕</button>
+        </div>
+      </div>
+
+      <button class="btn-add" onclick="addService()">
+        <span style="font-size:16px;line-height:1">+</span> Add Service
+      </button>
+    </div>
+
+    <!-- ── STEP 4: SCHEDULE ───────────────────────────── -->
+    <div class="step-panel" id="step-4">
+      <div class="step-header">
+        <div class="step-tag">Step 4 of 5</div>
+        <h2 class="step-title">Working <em>Hours</em></h2>
+        <p class="step-subtitle">Set your availability — the agent will only offer slots within these hours.</p>
+      </div>
+
+      <div class="schedule-table">
+        <div class="schedule-head">
+          <span>Day</span>
+          <span>Opens At</span>
+          <span>Closes At</span>
+          <span style="text-align:center">Active</span>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Monday</div>
+          <input type="time" value="09:00" />
+          <input type="time" value="18:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Tuesday</div>
+          <input type="time" value="09:00" />
+          <input type="time" value="18:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Wednesday</div>
+          <input type="time" value="09:00" />
+          <input type="time" value="18:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Thursday</div>
+          <input type="time" value="09:00" />
+          <input type="time" value="18:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Friday</div>
+          <input type="time" value="09:00" />
+          <input type="time" value="20:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Saturday</div>
+          <input type="time" value="10:00" />
+          <input type="time" value="17:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" checked /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+        <div class="schedule-row">
+          <div class="day-name">Sunday</div>
+          <input type="time" value="11:00" />
+          <input type="time" value="15:00" />
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" /><div class="track"></div><div class="thumb"></div></label></div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top: 24px;">
+        <div class="form-group">
+          <label>Max Advance Booking</label>
+          <select>
+            <option>7 days ahead</option>
+            <option selected>14 days ahead</option>
+            <option>30 days ahead</option>
+            <option>60 days ahead</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Buffer Between Slots</label>
+          <select>
+            <option>No buffer</option>
+            <option selected>10 minutes</option>
+            <option>15 minutes</option>
+            <option>30 minutes</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 5: REVIEW ─────────────────────────────── -->
+    <div class="step-panel" id="step-5">
+      <div class="step-header">
+        <div class="step-tag">Step 5 of 5</div>
+        <h2 class="step-title">Review & <em>Launch</em></h2>
+        <p class="step-subtitle">Everything look right? Your agent will be live the moment you hit Launch.</p>
+      </div>
+
+      <div class="review-grid">
+        <div class="review-card">
+          <div class="review-card-label">Agent Identity</div>
+          <div class="review-row"><span class="rkey">Name</span><span class="rval" id="rv-name">—</span></div>
+          <div class="review-row"><span class="rkey">Voice</span><span class="rval" id="rv-voice">—</span></div>
+          <div class="review-row"><span class="rkey">Language</span><span class="rval" id="rv-lang">—</span></div>
+        </div>
+        <div class="review-card">
+          <div class="review-card-label">Business</div>
+          <div class="review-row"><span class="rkey">Name</span><span class="rval" id="rv-biz">—</span></div>
+          <div class="review-row"><span class="rkey">Industry</span><span class="rval" id="rv-industry">—</span></div>
+          <div class="review-row"><span class="rkey">Slot</span><span class="rval" id="rv-slot">—</span></div>
+        </div>
+        <div class="review-card full">
+          <div class="review-card-label">Services (<span id="rv-svc-count">0</span>)</div>
+          <div id="rv-services"></div>
+        </div>
+      </div>
+
+      <div class="launch-info">
+        <span style="font-size:20px;flex-shrink:0">✦</span>
+        <p>Your agent will be deployed on the Zara LiveKit infrastructure and start handling calls immediately. You can update all these settings anytime from your project dashboard without any downtime.</p>
+      </div>
+    </div>
+
+  </div><!-- /step-body -->
+
+  <!-- SUCCESS -->
+  <div id="success-screen">
+    <div class="success-ring">✦</div>
+    <h2 class="success-title">Agent is <em>live</em></h2>
+    <p class="success-sub">Your AI voice booking agent has been deployed and is ready to answer calls right now.</p>
+    <div class="agent-id-box">
+      <div>
+        <div class="agent-id-label">Agent ID</div>
+        <div id="generatedId">ZAR-A4F2C1</div>
+      </div>
+    </div>
+    <div class="success-actions">
+      <button class="btn-success-primary" onclick="window.location.href='zara-dashboard.html'">
+        📊 Go to Dashboard
+      </button>
+      <button class="btn-success-ghost" onclick="window.location.href='zara-wizard.html'">
+        + Create Another Agent
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP FOOTER -->
+  <div class="step-footer" id="stepFooter">
+    <div class="footer-left">
+      <button class="btn-back-step" id="btnBack" onclick="prevStep()">← Back</button>
+      <div class="step-indicator">Step <strong id="currentStepNum">1</strong> of 5</div>
+    </div>
+    <button class="btn-next-step" id="btnNext" onclick="nextStep()">
+      Continue <span>→</span>
+    </button>
+  </div>
+
+</div><!-- /wizard-wrap -->
+
+<script>
+  let currentStep = 1;
+  const totalSteps = 5;
+  let selectedVoice = 'aria';
+  const voiceLabels = {
+    aria: 'Aria · Warm & Professional',
+    nova: 'Nova · Crisp & Confident',
+    james: 'James · Deep & Trustworthy',
+    kai: 'Kai · Energetic & Friendly'
+  };
+
+  // ── Read agent name from URL ─────────────────────────
+  function init() {
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get('name') || sessionStorage.getItem('zaraAgentName') || '';
+    if (name) {
+      document.getElementById('navAgentName').textContent = name;
+      document.getElementById('f-agentName').value = name;
+    }
+  }
+  init();
+
+  // ── Voice picker ─────────────────────────────────────
+  function selectVoice(card) {
+    document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedVoice = card.dataset.voice;
+  }
+
+  // ── Services ──────────────────────────────────────────
+  function addService() {
+    const list = document.getElementById('servicesList');
+    const row = document.createElement('div');
+    row.className = 'service-row';
+    row.innerHTML = `
+      <input type="text" placeholder="Service name" />
+      <input type="text" placeholder="e.g. 30 min" />
+      <input type="text" placeholder="e.g. ₹500" />
+      <button class="btn-remove" onclick="removeService(this)" title="Remove">✕</button>
+    `;
+    list.appendChild(row);
+    row.querySelector('input').focus();
+  }
+  function removeService(btn) {
+    const rows = document.querySelectorAll('.service-row');
+    if (rows.length > 1) btn.closest('.service-row').remove();
+  }
+
+  // ── Stepper update ────────────────────────────────────
+  function updateStepper() {
+    for (let i = 1; i <= totalSteps; i++) {
+      const step = document.querySelector(`.stepper-step[data-step="${i}"]`);
+      const bubble = document.getElementById(`b${i}`);
+      step.classList.remove('active', 'done');
+
+      if (i < currentStep) {
+        step.classList.add('done');
+        bubble.textContent = '✓';
+      } else if (i === currentStep) {
+        step.classList.add('active');
+        bubble.textContent = String(i).padStart(2, '0');
+      } else {
+        bubble.textContent = String(i).padStart(2, '0');
+      }
+    }
+    for (let i = 1; i < totalSteps; i++) {
+      const conn = document.getElementById(`c${i}`);
+      if (i < currentStep) conn.classList.add('filled');
+      else conn.classList.remove('filled');
+    }
+    document.getElementById('currentStepNum').textContent = currentStep;
+    document.getElementById('btnBack').style.visibility = currentStep === 1 ? 'hidden' : 'visible';
+    const btnNext = document.getElementById('btnNext');
+    btnNext.innerHTML = currentStep === totalSteps
+      ? '✦ Launch Agent'
+      : 'Continue <span>→</span>';
+  }
+
+  // ── Navigation ────────────────────────────────────────
+  function nextStep() {
+    if (currentStep < totalSteps) {
+      document.getElementById(`step-${currentStep}`).classList.remove('active');
+      currentStep++;
+      const panel = document.getElementById(`step-${currentStep}`);
+      panel.classList.remove('going-back');
+      panel.classList.add('active');
+      if (currentStep === 5) buildReview();
+      updateStepper();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      launchAgent();
+    }
+  }
+
+  function prevStep() {
+    if (currentStep > 1) {
+      document.getElementById(`step-${currentStep}`).classList.remove('active');
+      currentStep--;
+      const panel = document.getElementById(`step-${currentStep}`);
+      panel.classList.add('going-back');
+      panel.classList.add('active');
+      updateStepper();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function jumpTo(step) {
+    if (step >= currentStep) return; // only allow going back via stepper
+    document.getElementById(`step-${currentStep}`).classList.remove('active');
+    currentStep = step;
+    const panel = document.getElementById(`step-${currentStep}`);
+    panel.classList.add('going-back');
+    panel.classList.add('active');
+    updateStepper();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Review ────────────────────────────────────────────
+  function buildReview() {
+    document.getElementById('rv-name').textContent = document.getElementById('f-agentName').value || '—';
+    document.getElementById('rv-voice').textContent = voiceLabels[selectedVoice] || selectedVoice;
+    document.getElementById('rv-lang').textContent = document.getElementById('f-lang').value || '—';
+    document.getElementById('rv-biz').textContent = document.getElementById('f-bizName').value || '—';
+    document.getElementById('rv-industry').textContent = document.getElementById('f-industry').value || '—';
+    document.getElementById('rv-slot').textContent = document.getElementById('f-slot').value || '—';
+
+    const rows = document.querySelectorAll('.service-row');
+    document.getElementById('rv-svc-count').textContent = rows.length;
+    const svcContainer = document.getElementById('rv-services');
+    svcContainer.innerHTML = '';
+    rows.forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      const name = inputs[0].value || 'Unnamed service';
+      const dur  = inputs[1].value || '—';
+      const price = inputs[2].value || '—';
+      svcContainer.innerHTML += `
+        <div class="review-row">
+          <span class="rkey">${name}</span>
+          <span class="rval">${dur} · ${price}</span>
+        </div>`;
+    });
+  }
+
+  // ── Launch ────────────────────────────────────────────
+  function launchAgent() {
+    const agentName = document.getElementById('f-agentName').value || 'Agent';
+    // Animate out
+    document.querySelector('.step-body').style.transition = 'opacity 0.4s, transform 0.4s';
+    document.querySelector('.step-body').style.opacity = '0';
+    document.querySelector('.step-body').style.transform = 'scale(0.97)';
+    document.getElementById('stepFooter').style.display = 'none';
+    document.getElementById('stepperBar').style.display = 'none';
+
+    setTimeout(() => {
+      document.querySelector('.step-body').style.display = 'none';
+      const id = 'ZAR-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      document.getElementById('generatedId').textContent = id;
+      const success = document.getElementById('success-screen');
+      success.style.display = 'flex';
+      // Update nav
+      document.getElementById('navAgentName').textContent = `${agentName} · Live ✦`;
+    }, 420);
+  }
+
+  // Init stepper
+  updateStepper();
+</script>
+</body>
+</html>

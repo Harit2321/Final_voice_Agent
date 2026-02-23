@@ -1,0 +1,91 @@
+Latest next-panic log: next-panic-834352024c6bdb00e502adcf08c40bdb.log
+---------------------------
+Failed to write app endpoint /page
+
+Caused by:
+- [project]/app/globals.css [app-client] (css)
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)
+
+Debug info:
+- Execution of Project::hmr_version_state failed
+- Execution of Project::hmr_version failed
+- Execution of VersionedContentMap::get failed
+- Execution of VersionedContentMap::get_asset failed
+- Execution of VersionedContentMap::compute_entry failed
+- Execution of *emit_assets failed
+- Execution of all_assets_from_entries_operation failed
+- Execution of *all_assets_from_entries failed
+- Execution of endpoint_output_assets_operation failed
+- Execution of <AppEndpoint as Endpoint>::output failed
+- Failed to write app endpoint /page
+- Execution of AppEndpoint::output failed
+- Execution of AppProject::app_module_graphs failed
+- Execution of *<AppEndpoint as Endpoint>::additional_entries failed
+- Execution of *ModuleGraph::from_graphs failed
+- Execution of SingleModuleGraph::new_with_entries_visited_intern failed
+- [project]/app/globals.css [app-client] (css)
+- Execution of primary_chunkable_referenced_modules failed
+- Execution of <CssModuleAsset as Module>::references failed
+- Execution of parse_css failed
+- Execution of <PostCssTransformedAsset as Asset>::content failed
+- Execution of PostCssTransformedAsset::process failed
+- Execution of evaluate_webpack_loader failed
+- Execution of get_evaluate_pool failed
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)
+---------------------------
+[project]/app/globals.css [app-client] (css)
+
+Caused by:
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)
+
+Debug info:
+- Execution of subscribe_issues_and_diags_operation failed
+- Execution of <AppEndpoint as Endpoint>::server_changed failed
+- Execution of *Project::server_changed failed
+- Execution of *AppEndpointOutput::server_assets failed
+- Execution of AppEndpoint::output failed
+- Execution of AppProject::app_module_graphs failed
+- Execution of *<AppEndpoint as Endpoint>::additional_entries failed
+- Execution of *ModuleGraph::from_graphs failed
+- Execution of SingleModuleGraph::new_with_entries_visited_intern failed
+- [project]/app/globals.css [app-client] (css)
+- Execution of primary_chunkable_referenced_modules failed
+- Execution of <CssModuleAsset as Module>::references failed
+- Execution of parse_css failed
+- Execution of <PostCssTransformedAsset as Asset>::content failed
+- Execution of PostCssTransformedAsset::process failed
+- Execution of evaluate_webpack_loader failed
+- Execution of get_evaluate_pool failed
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)
+---------------------------
+Failed to write app endpoint /dashboard/page
+
+Caused by:
+- [project]/app/globals.css [app-client] (css)
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Execution of endpoint_write_to_disk failed
+- Execution of <AppEndpoint as Endpoint>::output failed
+- Failed to write app endpoint /dashboard/page
+- Execution of AppEndpoint::output failed
+- Execution of AppProject::app_module_graphs failed
+- Execution of *<AppEndpoint as Endpoint>::additional_entries failed
+- Execution of *ModuleGraph::from_graphs failed
+- Execution of SingleModuleGraph::new_with_entries_visited_intern failed
+- [project]/app/globals.css [app-client] (css)
+- Execution of primary_chunkable_referenced_modules failed
+- Execution of <CssModuleAsset as Module>::references failed
+- Execution of parse_css failed
+- Execution of <PostCssTransformedAsset as Asset>::content failed
+- Execution of PostCssTransformedAsset::process failed
+- Execution of evaluate_webpack_loader failed
+- Execution of get_evaluate_pool failed
+- failed to write to D:\TSC\agent\frontend\.next\dev\build\chunks\[turbopack-node]_transforms_postcss_ts_6920245c._.js
+- Insufficient system resources exist to complete the requested service. (os error 1450)

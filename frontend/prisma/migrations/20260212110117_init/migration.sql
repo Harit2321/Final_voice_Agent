@@ -1,0 +1,4 @@
+-- This migration is a no-op.
+-- Its changes (DROP INDEX "services_name_key" and ADD COLUMN "projectId" on services)
+-- were already applied by migration 20260212105940_init.
+-- The content has been neutralised to prevent shadow database conflicts (P3006).

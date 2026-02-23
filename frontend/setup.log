@@ -1,0 +1,57 @@
+Starting DB setup... 
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+
+✔ Generated Prisma Client (v7.4.0) to .\node_modules\@prisma\client in 109ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+Datasource "db": PostgreSQL database "voiceagent", schema "public" at "localhost:5432"
+
+The database is already in sync with the Prisma schema.
+
+Loaded Prisma config from prisma.config.ts.
+
+Running seed command `ts-node --compiler-options {"module":"CommonJS"} prisma/seed.ts` ...
+d:\TSC\Agent_Cal_Com_Delay\frontend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:259
+        throw new PrismaClientInitializationError(
+              ^
+PrismaClientInitializationError: `PrismaClient` needs to be constructed with a non-empty, valid `PrismaClientOptions`:
+
+```
+new PrismaClient({
+  ...
+})
+```
+
+or
+
+```
+constructor() {
+  super({ ... });
+}
+```
+          
+    at new t (d:\TSC\Agent_Cal_Com_Delay\frontend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:259:15)
+    at Object.<anonymous> (d:\TSC\Agent_Cal_Com_Delay\frontend\prisma\seed.ts:4:16)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Module.m._compile (d:\TSC\Agent_Cal_Com_Delay\frontend\node_modules\ts-node\src\index.ts:1618:23)
+    at node:internal/modules/cjs/loader:1839:10
+    at Object.require.extensions.<computed> [as .ts] (d:\TSC\Agent_Cal_Com_Delay\frontend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24) {
+  clientVersion: '7.4.0',
+  errorCode: undefined,
+  retryable: undefined
+}
+
+An error occurred while running the seed command:
+Error: Command failed with exit code 1: ts-node --compiler-options {"module":"CommonJS"} prisma/seed.ts
+DB setup finished. 

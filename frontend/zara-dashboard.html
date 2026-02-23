@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zara — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --black:   #080808;
+      --surface: #0f0f0f;
+      --card:    #141414;
+      --border:  #1e1e1e;
+      --gold:    #c9a84c;
+      --gold-lt: #e8c97a;
+      --gold-dk: #8a6b2a;
+      --muted:   #4a4a4a;
+      --text:    #d4d4d4;
+      --white:   #f5f0e8;
+      --green:   #2d6a4f;
+      --green-lt:#52b788;
+      --font-display: 'Cormorant Garamond', serif;
+      --font-body:    'Outfit', sans-serif;
+      --font-mono:    'DM Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--black);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+      opacity: 0.03; pointer-events: none; z-index: 9999;
+    }
+
+    /* ─── SIDEBAR ─────────────────────────────────────── */
+    .layout { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 0;
+      position: fixed;
+      top: 0; left: 0;
+      height: 100vh;
+      z-index: 50;
+    }
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 24px 28px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--white);
+      text-decoration: none;
+    }
+    .logo-dot {
+      width: 8px; height: 8px;
+      background: var(--gold);
+      border-radius: 50%;
+      animation: pulse-dot 2.4s ease-in-out infinite;
+    }
+    .sidebar-nav {
+      padding: 20px 0;
+      flex: 1;
+    }
+    .nav-section-label {
+      padding: 6px 24px 4px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 24px;
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 2px solid transparent;
+    }
+    .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+    .nav-item.active {
+      color: var(--gold);
+      border-left-color: var(--gold);
+      background: rgba(201,168,76,0.04);
+    }
+    .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+    .sidebar-bottom {
+      padding: 20px 24px;
+      border-top: 1px solid var(--border);
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold-dk), var(--gold));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--black);
+      flex-shrink: 0;
+    }
+    .user-name { font-size: 12px; color: var(--text); font-weight: 500; }
+    .user-plan { font-size: 10px; color: var(--muted); }
+
+    /* ─── MAIN ────────────────────────────────────────── */
+    .main {
+      flex: 1;
+      margin-left: 240px;
+      min-height: 100vh;
+    }
+
+    /* ─── TOP BAR ─────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,8,8,0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .topbar-left h1 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+      color: var(--white);
+      letter-spacing: 0.02em;
+    }
+    .topbar-left p { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .btn-new {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dk) 100%);
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-new:hover { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(201,168,76,0.22); }
+
+    /* ─── CONTENT ─────────────────────────────────────── */
+    .content { padding: 40px; }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+    .stat-card {
+      background: var(--card);
+      padding: 24px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-dk), transparent);
+    }
+    .stat-label-sm {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: var(--font-display);
+      font-size: 34px;
+      font-weight: 300;
+      color: var(--white);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .stat-value span { font-size: 18px; color: var(--gold); }
+    .stat-change {
+      font-size: 11px;
+      color: var(--green-lt);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Section header */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .section-head h2 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--white);
+    }
+    .section-head p { font-size: 12px; color: var(--muted); }
+
+    /* ─── PROJECT CARDS ───────────────────────────────── */
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    .project-card {
+      background: var(--card);
+      padding: 28px 30px;
+      cursor: pointer;
+      transition: background 0.25s;
+      position: relative;
+      overflow: hidden;
+      animation: fadeUp 0.4s ease both;
+    }
+    .project-card:hover { background: #181818; }
+    .project-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .project-card:hover::before { opacity: 1; }
+
+    .project-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .project-icon {
+      width: 44px; height: 44px;
+      background: rgba(201,168,76,0.08);
+      border: 1px solid var(--gold-dk);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .project-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .status-live .status-dot { background: var(--green-lt); animation: pulse-dot 2s infinite; }
+    .status-live { color: var(--green-lt); }
+    .status-draft .status-dot { background: var(--muted); }
+    .status-draft { color: var(--muted); }
+
+    .project-name {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--white);
+      margin-bottom: 4px;
+      letter-spacing: 0.01em;
+    }
+    .project-biz {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .project-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .ptag {
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .project-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .meta-stat { text-align: center; }
+    .meta-num {
+      font-family: var(--font-display);
+      font-size: 22px;
+      color: var(--white);
+      font-weight: 300;
+    }
+    .meta-label {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* New project card (CTA card) */
+    .card-new {
+      background: var(--card);
+      border: 1px dashed var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 48px 30px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+      min-height: 220px;
+    }
+    .card-new:hover {
+      border-color: var(--gold-dk);
+      background: rgba(201,168,76,0.02);
+    }
+    .card-new-icon {
+      width: 48px; height: 48px;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: var(--muted);
+      transition: all 0.3s;
+    }
+    .card-new:hover .card-new-icon {
+      border-color: var(--gold-dk);
+      color: var(--gold);
+    }
+    .card-new p { font-size: 13px; color: var(--muted); }
+    .card-new span {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+    .card-new:hover span { color: var(--gold); }
+
+    /* ─── MODAL OVERLAY ───────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(8,8,8,0.88);
+      backdrop-filter: blur(12px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      width: 100%;
+      max-width: 520px;
+      padding: 48px 48px 40px;
+      position: relative;
+      transform: translateY(20px) scale(0.97);
+      transition: transform 0.35s ease;
+      overflow: hidden;
+    }
+    .modal-overlay.open .modal {
+      transform: translateY(0) scale(1);
+    }
+    .modal::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 18px; right: 18px;
+      width: 32px; height: 32px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .modal-close:hover { border-color: var(--text); color: var(--text); }
+
+    .modal-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-tag::before { content: ''; display: block; width: 20px; height: 1px; background: var(--gold); }
+
+    .modal h2 {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 300;
+      color: var(--white);
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .modal h2 em { font-style: italic; color: var(--gold-lt); }
+    .modal p { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
+
+    .modal-field { margin-bottom: 24px; }
+    .modal-field label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold-dk);
+      margin-bottom: 8px;
+    }
+    .modal-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--white);
+      font-family: var(--font-body);
+      font-size: 22px;
+      font-weight: 300;
+      padding: 14px 18px;
+      outline: none;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      letter-spacing: 0.04em;
+    }
+    .modal-input::placeholder { color: var(--muted); font-size: 20px; }
+    .modal-input:focus {
+      border-color: var(--gold-dk);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.06);
+    }
+    .char-count {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .modal-hint {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .hint-chip {
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.06em;
+    }
+    .hint-chip:hover {
+      border-color: var(--gold-dk);
+      color: var(--gold);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 32px;
+    }
+    .btn-primary-modal {
+      flex: 1;
+      padding: 13px 24px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dk) 100%);
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-primary-modal:hover { box-shadow: 0 8px 28px rgba(201,168,76,0.2); }
+    .btn-primary-modal:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-cancel {
+      padding: 13px 20px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-cancel:hover { color: var(--text); border-color: var(--text); }
+
+    /* ─── EMPTY STATE ─────────────────────────────────── */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 80px 40px;
+    }
+    .empty-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+    .empty-state h3 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      color: var(--white);
+      font-weight: 300;
+      margin-bottom: 8px;
+    }
+    .empty-state p { font-size: 13px; color: var(--muted); }
+
+    /* ─── ANIMATIONS ─────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-dot {
+      0%,100% { box-shadow: 0 0 0 0 rgba(82,183,136,0.4); opacity: 1; }
+      50%      { box-shadow: 0 0 0 5px rgba(82,183,136,0); opacity: 0.7; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="zara-landing.html">
+      <div class="logo-dot"></div> Zara
+    </a>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Workspace</div>
+      <a class="nav-item active" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Projects
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Bookings
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.42 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 5.49 5.49l.96-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+        Calls
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </a>
+
+      <div class="nav-section-label" style="margin-top:16px">Account</div>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Profile
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="user-pill">
+        <div class="user-avatar">A</div>
+        <div>
+          <div class="user-name">Arjun Mehta</div>
+          <div class="user-plan">Pro Plan</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Projects</h1>
+        <p>Manage your AI voice booking agents</p>
+      </div>
+      <button class="btn-new" onclick="openModal()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Project
+      </button>
+    </div>
+
+    <div class="content">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label-sm">Total Agents</div>
+          <div class="stat-value" id="agentCount">2<span></span></div>
+          <div class="stat-change">↑ 1 this week</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label-sm">Bookings Today</div>
+          <div class="stat-value">14<span></span></div>
+          <div class="stat-change">↑ 23% vs yesterday</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label-sm">Calls This Month</div>
+          <div class="stat-value">148<span></span></div>
+          <div class="stat-change">↑ 12% vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label-sm">Conversion Rate</div>
+          <div class="stat-value">96<span>%</span></div>
+          <div class="stat-change">↑ 4% improvement</div>
+        </div>
+      </div>
+
+      <!-- Projects -->
+      <div class="section-head">
+        <div>
+          <h2>Your Agents</h2>
+          <p>Click any agent to configure or view its dashboard</p>
+        </div>
+      </div>
+
+      <div class="projects-grid" id="projectsGrid">
+
+        <!-- Sample Card 1 -->
+        <div class="project-card" onclick="openProject('luxe-studio')">
+          <div class="project-card-top">
+            <div class="project-icon">💈</div>
+            <div class="project-status status-live">
+              <div class="status-dot"></div> Live
+            </div>
+          </div>
+          <div class="project-name">Bella</div>
+          <div class="project-biz">Luxe Hair Studio · Salon</div>
+          <div class="project-tags">
+            <span class="ptag">English (US)</span>
+            <span class="ptag">7 services</span>
+            <span class="ptag">Mon–Sat</span>
+          </div>
+          <div class="project-meta">
+            <div class="meta-stat">
+              <div class="meta-num">84</div>
+              <div class="meta-label">Bookings</div>
+            </div>
+            <div class="meta-stat">
+              <div class="meta-num">23</div>
+              <div class="meta-label">Calls</div>
+            </div>
+            <div class="meta-stat">
+              <div class="meta-num">98%</div>
+              <div class="meta-label">Rate</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sample Card 2 -->
+        <div class="project-card" onclick="openProject('pulse-fitness')">
+          <div class="project-card-top">
+            <div class="project-icon">🏋️</div>
+            <div class="project-status status-live">
+              <div class="status-dot"></div> Live
+            </div>
+          </div>
+          <div class="project-name">Max</div>
+          <div class="project-biz">Pulse Fitness · Gym</div>
+          <div class="project-tags">
+            <span class="ptag">English (US)</span>
+            <span class="ptag">4 services</span>
+            <span class="ptag">Mon–Sun</span>
+          </div>
+          <div class="project-meta">
+            <div class="meta-stat">
+              <div class="meta-num">64</div>
+              <div class="meta-label">Bookings</div>
+            </div>
+            <div class="meta-stat">
+              <div class="meta-num">19</div>
+              <div class="meta-label">Calls</div>
+            </div>
+            <div class="meta-stat">
+              <div class="meta-num">94%</div>
+              <div class="meta-label">Rate</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- New Agent CTA Card -->
+        <div class="card-new" onclick="openModal()">
+          <div class="card-new-icon">+</div>
+          <div>
+            <span>New Agent</span>
+            <p>Set up a new AI voice booking agent</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ─── NEW PROJECT MODAL ──────────────────────────────── -->
+<div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+
+    <div class="modal-tag">New Project</div>
+    <h2>Name your <em>agent</em></h2>
+    <p>Choose a name your customers will hear when they call. You can change this later.</p>
+
+    <div class="modal-field">
+      <label>Agent Name</label>
+      <input
+        class="modal-input"
+        id="agentNameInput"
+        type="text"
+        placeholder="e.g. Aria, Nova, James…"
+        maxlength="24"
+        oninput="onNameInput(this)"
+        onkeydown="handleEnter(event)"
+        autofocus
+      />
+      <div class="char-count"><span id="charCount">0</span> / 24</div>
+    </div>
+
+    <div class="modal-hint">
+      <div class="hint-chip" onclick="fillName('Aria')">Aria</div>
+      <div class="hint-chip" onclick="fillName('Nova')">Nova</div>
+      <div class="hint-chip" onclick="fillName('James')">James</div>
+      <div class="hint-chip" onclick="fillName('Kai')">Kai</div>
+      <div class="hint-chip" onclick="fillName('Luna')">Luna</div>
+      <div class="hint-chip" onclick="fillName('Ethan')">Ethan</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary-modal" id="btnCreate" onclick="createProject()" disabled>
+        Continue to Setup →
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let agentNameValue = '';
+
+  function openModal() {
+    document.getElementById('modalOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('agentNameInput').focus(), 100);
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('open');
+    document.getElementById('agentNameInput').value = '';
+    document.getElementById('charCount').textContent = '0';
+    document.getElementById('btnCreate').disabled = true;
+    agentNameValue = '';
+  }
+
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+  }
+
+  function onNameInput(input) {
+    agentNameValue = input.value.trim();
+    document.getElementById('charCount').textContent = input.value.length;
+    document.getElementById('btnCreate').disabled = agentNameValue.length < 2;
+  }
+
+  function fillName(name) {
+    const input = document.getElementById('agentNameInput');
+    input.value = name;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+
+  function handleEnter(e) {
+    if (e.key === 'Enter' && agentNameValue.length >= 2) createProject();
+  }
+
+  function createProject() {
+    if (!agentNameValue) return;
+    // Store the agent name and go to wizard
+    sessionStorage.setItem('zaraAgentName', agentNameValue);
+    window.location.href = `zara-wizard.html?name=${encodeURIComponent(agentNameValue)}`;
+  }
+
+  function openProject(id) {
+    window.location.href = `zara-wizard.html?project=${id}`;
+  }
+
+  // Keyboard: Escape to close
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+</script>
+</body>
+</html>

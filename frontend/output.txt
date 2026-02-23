@@ -1,0 +1,11 @@
+prisma               : 7.4.0
+@prisma/client       : 7.4.0
+Operating System     : win32
+Architecture         : x64
+Node.js              : v22.19.0
+TypeScript           : 5.9.3
+Query Compiler       : enabled
+PSL                  : @prisma/prisma-schema-wasm 7.4.0-20.ab56fe763f921d033a6c195e7ddeb3e255bdbb57
+Schema Engine        : schema-engine-cli ab56fe763f921d033a6c195e7ddeb3e255bdbb57 (at node_modules\@prisma\engines\schema-engine-windows.exe)
+Default Engines Hash : ab56fe763f921d033a6c195e7ddeb3e255bdbb57
+Studio               : 0.13.1

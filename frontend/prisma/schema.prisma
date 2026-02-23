@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User model for authentication and profile
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  bookings      Booking[]
+  conversations Conversation[]
+  projects      Project[]
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// Service model for available booking services
+model Service {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  duration    Int // duration in minutes
+  price       Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  bookings Booking[]
+  
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  @@map("services")
+}
+
+// Booking model for appointments
+model Booking {
+  id            String        @id @default(uuid())
+  userId        String
+  serviceId     String
+  scheduledAt   DateTime
+  duration      Int // duration in minutes
+  status        BookingStatus @default(PENDING)
+  calComEventId String? // Cal.com integration
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([userId])
+  @@index([serviceId])
+  @@index([scheduledAt])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// Conversation model for storing voice agent interactions
+model Conversation {
+  id         String   @id @default(uuid())
+  userId     String?
+  transcript Json // Store full conversation transcript
+  summary    String?
+  metadata   Json? // Additional metadata (language, duration, etc.)
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("conversations")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  userId      String
+  
+  // Agent Identity
+  agentName   String
+  language    String
+  greeting    String?
+  voiceId     String
+
+  // Business Details
+  businessName String
+  industry     String
+  phone        String
+  website      String?
+
+  // Schedule (stored as JSON)
+  schedule    Json
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services    Service[]
+
+  @@map("projects")
+}

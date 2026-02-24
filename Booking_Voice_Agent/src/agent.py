@@ -656,15 +656,12 @@ Location: Asia/Kolkata
         - ❌ "Main aapki booking ki pushti karti hoon." -> ✅ "Main aapki booking confirm kar deti hoon."
         - ❌ "Kripya apna phone number batayein." -> ✅ "Apna phone number bata dijiye please."
       - Speak fluent, conversational Hindi/Hinglish.
-     - **CRITICAL FOR NUMBERS**: You MUST TRANSLITERATE all numbers into Hindi words. The TTS reads digits in English, so you must write the Hindi pronunciation.
-       - "1" -> "ek"
-       - "2" -> "do"
-       - "3" -> "teen"
-       - "5:00 PM" -> "paanch baje"
-       - "15 mins" -> "pandrah minute"
-       - "10th" -> "das-vi" or "das" depending on context.
-       - "2 services" -> "do services"
-     - **NEVER** output digits (e.g., "5") in Hindi mode. ALWAYS spell them out ("paanch").
+     - **CRITICAL FOR NUMBERS (HINDI/HINGLISH MODE ONLY)**: ONLY transliterate numbers when the user is speaking Hindi or Hinglish. If the user is speaking English, ALWAYS use normal English digits and words.
+       - Hindi/Hinglish: "5:00 PM" -> "paanch PM", "15 mins" -> "pandrah minute", "2 services" -> "do services"
+       - English: "5:00 PM" -> "5:00 PM", "15 mins" -> "15 minutes", "2 services" -> "2 services"
+     - **NEVER** use "baje" for times in any language. Just say the number + AM/PM.
+     - **NEVER** output digits in Hindi/Hinglish mode. ALWAYS spell them out ("paanch", "das", etc.)
+     - **In English mode**: ALWAYS use digits and standard English time format. Never transliterate.
 
     - **DATE PRONUNCIATION (ALL MODES)**:
       - **ALWAYS** speak dates naturally: "January 2nd", "2nd of Jan", "March 15th".
@@ -755,10 +752,10 @@ Location: Asia/Kolkata
      - **Check Result**: Is the requested time in the available list?
        - **YES**: "Perfect, that time works!" -> Proceed to Phone number.
        - **NO**: Check the list for the **NEAREST** available slots. Say: "That time isn't available, but I have [Nearest Slot 1] and [Nearest Slot 2]. Do either of those work?"
-   - **Scenario B: User says "Check availability", "Suggest a time", or gives no specific time**:
+    - **Scenario B: User says "Check availability", "Suggest a time", or gives no specific time**:
      - Call get_availability for the date.
-     - **Response**: Suggest 3 available slots from the list. "I have openings at [Time 1], [Time 2], and [Time 3]."
-     - **Fallback**: "If those don't work, let me know what time you're looking for." (Allow explicit choice).
+     - **Response**: Tell the user the FREE TIME WINDOWS (e.g. "That day is fully open from 10 AM to 6 PM" or "We have openings from 10 AM to 2 PM, and 4 PM to 7 PM"). DO NOT list individual slot times.
+     - Then ask: "What time works best for you in that window?"
    - **After confirming time, make your SECOND related service suggestion (if appropriate)**
 
 4. **Phone**: If missing, ask warmly:
@@ -1309,13 +1306,42 @@ Location: Asia/Kolkata
             
             if not matched:
                  return note_prefix + f"No slots available on {formatted_date}."
-            matches_times = [s.strftime("%I:%M %p") for s in matched]
-            
+            duration_mins = service_info.get("lengthInMinutes", 30)
+            matched.sort()
+
+            ranges = []
+            if matched:
+                range_start = matched[0]
+                range_end   = matched[0] + timedelta(minutes=duration_mins)
+                for prev, curr in zip(matched, matched[1:]):
+                    gap = (curr - (prev + timedelta(minutes=duration_mins))).total_seconds() / 60
+                    if gap <= 5:  # consecutive (allow tiny rounding gaps)
+                        range_end = curr + timedelta(minutes=duration_mins)
+                    else:         # gap found → booked block in between
+                        ranges.append((range_start, range_end))
+                        range_start = curr
+                        range_end   = curr + timedelta(minutes=duration_mins)
+                ranges.append((range_start, range_end))
+
+            def fmt(d):
+                return d.strftime("%I:%M %p").lstrip("0")
+
+            all_slots_str = ", ".join(s.strftime("%I:%M %p") for s in matched)
+
+            if len(ranges) == 1:
+                # Single continuous block → "fully free from X to Y"
+                reply = f"{note_prefix}That day is fully open from {fmt(ranges[0][0])} to {fmt(ranges[0][1])}."
+            else:
+                # Multiple windows → describe each free window
+                window_strs = [f"{fmt(rs)} to {fmt(re)}" for rs, re in ranges]
+                windows_text = ", and ".join([", ".join(window_strs[:-1]), window_strs[-1]]) if len(window_strs) > 1 else window_strs[0]
+                reply = f"{note_prefix}We have openings from {windows_text} on that day."
+
             return (
-                f"{note_prefix}Here are all the available slots: {', '.join(matches_times)}. "
-                "(SYSTEM NOTE: Only verbally list the first 3 options to the user. "
-                "If the user requested a specific time that is NOT in this list, suggest the NEAREST times from this list. "
-                "Accept ANY time from the full list above if the user requests it.)"
+                reply + " "
+                f"(SYSTEM NOTE: all_slots={all_slots_str}; "
+                "If user requests a specific time NOT in this list, suggest the NEAREST available times. "
+                "Accept ANY time from the full list if user requests it.)"
             )
 
         except Exception as e:

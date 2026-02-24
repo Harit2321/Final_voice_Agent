@@ -1,5 +1,6 @@
 import logging
 import os
+# from Booking_Voice_Agent.src import fsm
 import certifi
 import ssl
 import asyncio
@@ -37,6 +38,18 @@ from fsm import FSM,State
 
 
 logger = logging.getLogger("agent-Salon_Agent")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S"
+)
+logging.getLogger("fsm").setLevel(logging.DEBUG)
+_fsm_logger = logging.getLogger("fsm")
+if not _fsm_logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s [FSM] %(levelname)s: %(message)s", "%H:%M:%S"))
+    _fsm_logger.addHandler(_h)
+_fsm_logger.propagate = False
 
 load_dotenv(".env.local")
 
@@ -224,6 +237,33 @@ def find_service_by_name(service_name: str):
     
     return None
 
+def find_combo_service(primary_service: str, addon_service: str):
+    """Look for a combo event type covering both services."""
+    services = get_all_services()
+    primary_lower = primary_service.lower().strip()
+    addon_lower = addon_service.lower().strip()
+
+    def keywords(s):
+        stop = {"and", "with", "a", "the", "&", "+"}
+        return [w for w in s.split() if w not in stop and len(w) > 1]
+
+    primary_kws = keywords(primary_lower)
+    addon_kws = keywords(addon_lower)
+    best = None
+    best_score = 0
+
+    for svc in services:
+        combined = svc["title"].lower() + " " + svc["slug"].lower()
+        hits_primary = any(kw in combined for kw in primary_kws)
+        hits_addon = any(kw in combined for kw in addon_kws)
+        score = sum(1 for kw in primary_kws if kw in combined) + \
+                sum(1 for kw in addon_kws if kw in combined)
+        if hits_primary and hits_addon and score > best_score:
+            best_score = score
+            best = svc
+
+    return best
+
 
 def filter_services_by_project(agent_config: dict | None) -> None:
     """
@@ -290,9 +330,12 @@ def filter_services_by_project(agent_config: dict | None) -> None:
         )
 
 
-
 def normalize_phone(phone: str) -> str:
+    # Strip everything non-digit (handles hyphens, commas, spaces from STT)
     digits = "".join(filter(str.isdigit, phone))
+    # Accept 10 digits (local), 11 digits (0XXXXXXXXXX), or 12 digits (91XXXXXXXXXX)
+    if len(digits) >= 12:
+        return f"+{digits[-12:]}"  # already has country code
     return f"+91{digits[-10:]}"
 
 
@@ -458,11 +501,9 @@ class SilenceMonitor:
                 self._prompt_count += 1
                 logger.info(f"User silence detected, prompting ({self._prompt_count}/{self._max_prompts})")
                 
-                prompts = [
-                    "Hello....???...Are you there....??"
-                ]
+                fsm = getattr(self.session, 'fsm', None)
+                prompt = fsm.get_silence_prompt() if fsm else "Hello...? Are you still there?"
                 
-                prompt = prompts[min(self._prompt_count - 1, len(prompts) - 1)]
                 await self.session.say(prompt, allow_interruptions=True)
                 
                 if self._prompt_count < self._max_prompts:
@@ -669,33 +710,40 @@ Location: Asia/Kolkata
       - If you see "2026-01-02", say "January 2nd".
 
     - **PHONE NUMBER PRONUNCIATION**:
-      - **CONTINUOUS DIGITS**: Speak the digits in a single steady stream.
-      - **NO PAUSES**: Do NOT group digits. Do NOT add spaces.
-      - **FORMAT**: Output "9876543210" (Good). "98765 43210" (Bad - creates pause). "987-654..." (Bad).
-      - **IGNORE PREFIX**: If the number is "+919876543210", just say "9876543210".
+      - **SPEAK NATURALLY**: Read phone numbers the way a human would — in small groups with natural pauses.
+      - **GROUPING**: Split 10-digit numbers into groups of 3-3-4. e.g. "9876543210" → "987... 654... 3210"
+      - **FORMAT IN OUTPUT**: Write with spaces so TTS pauses naturally: "987 654 3210"
+      - **IGNORE PREFIX**: If the number is "+919876543210", drop the 91 and read last 10 digits grouped.
+      - **EXAMPLES**:
+        - "9876543210" → say "987 654 3210"
+        - "+919876543210" → say "987 654 3210"
+        - "98765 43210" → say "987 654 3210"
+      - **HINDI MODE**: Same grouping but transliterate each group:
+        - "987 654 3210" → "nau sau sataasi... chhe sau chauvan... teen hazaar do sau das"
+        - Keep it natural, don't rush
 
 ### Upselling Related Services:
 **You should gently suggest related/complementary services to enhance the customer experience.**
 
 **IMPORTANT LIMITS**: 
-- Suggest related services MAXIMUM 2-3 times per conversation
-- Stop suggesting after 2-3 attempts, even if politely declined
-- Never be pushy - keep suggestions brief and natural
-- Never be pushy - keep suggestions brief and natural
-- If customer declines once, try only 1-2 more times maximum
+- Suggest related services EXACTLY 2 times per conversation — no more, no less.
+- NEVER suggest a third time even if declined.
+- Never be pushy - keep suggestions brief and natural.
 - **GENDER AWARENESS**:
   - If the user is **FEMALE** (e.g. "I'm a girl", "she/her" context), **NEVER** suggest beard trims.
   - If the user is **MALE**, you can suggest beard trims.
 
-**Suggestion Opportunities**:
-1. **After initial service is chosen** (First opportunity):
-   - "Great choice... you know, a lot of our customers also love pairing that with [related service]. Would you be interested?"
+**Suggestion Opportunities (EXACTLY 2 — no more)**:
+1. **FIRST: Right after the user confirms their service**:
+   - Suggest immediately after service is locked in, before asking about date/time.
+   - "Great choice... a lot of our customers also love pairing that with [related service]. Want to add that too?"
    
-2. **After date/time is confirmed** (Second opportunity - only if first was declined):
-   - "Perfect... by the way, we also have [related service] available that day. Want to add that on?"
+2. **SECOND: Right after booking is confirmed and created**:
+   - After create_booking tool returns success, suggest once as a closing offer.
+   - "By the way, next time you could also try [related service] — a lot of people love combining it. Just a thought!"
 
-3. **Before final confirmation** (Third opportunity - only if needed):
-   - "Just so you know... [related service] goes really well with what you've booked. Should I add that too?"
+- **NEVER suggest during date/time collection or OTP steps.**
+- **If declined at step 1, do NOT suggest again until after booking is done (step 2).**
 
 **Related Service Examples**:
 - Haircut → Hair color, hair treatment, beard trim
@@ -769,7 +817,7 @@ Location: Asia/Kolkata
    - **CRITICAL**: Do NOT proceed to confirmation until `verify_otp` returns success.
 
 6. **Confirmation**: After ALL info collected AND OTP verified, confirm:
-   - **Before confirming, make your THIRD and FINAL related service suggestion (if needed and appropriate)**
+   - (No upselling here — only suggest at service selection and after booking is complete)
    - "Okay, so just to make sure I have this right... I'm booking [Service] on [date] at [time]... and I have your number as [phone (digits only, no spaces)]."
    - Brief pause, then: "Should I go ahead and confirm that for you?"
 
@@ -784,8 +832,9 @@ Location: Asia/Kolkata
 - Ask ONE question at a time for missing information only
 - Do NOT ask for the user's name (use defaults)
 - YOU MUST ask for the phone number if not provided
+- **PHONE NUMBER FORMAT**: The moment you hear 10 or more digits from the user (even with hyphens, spaces, commas between them like "98765-43210" or "987 654 3210"), IMMEDIATELY call `input_phone` with exactly what was said. NEVER ask the user to repeat or reformat. NEVER try to clean the number yourself. The backend handles everything.
 - If multiple bookings match the phone number, ask identifying questions conversationally
-- **UPSELLING LIMIT: Maximum 2-3 related service suggestions per conversation - then STOP**
+- **UPSELLING LIMIT: Exactly 2 suggestions — once after service is chosen, once after booking is confirmed. NEVER more.**
 - **IMPORTANT RESPONSE**: If the user says "I want this service" or confirms a service, you MUST reply: "Is there any time in your mind or should I check availability?"
 - **AUTO-CHECK: Whenever a date OR time is mentioned, IMMEDIATELY call get_availability before proceeding**
 
@@ -801,7 +850,7 @@ Location: Asia/Kolkata
 
 **Upselling naturally**: "By the way...", "Oh, and...", "Just a thought...", "A lot of people also..."
 
-**Example - Instead of listing services**: "What service would you like? (Do NOT list options)"
+"When asked what services are available, call `list_available_services` and mention only the CATEGORY NAMES naturally. Never list individual service names or durations aloud."
 
 **Say naturally**: "So... what service are you looking for today?"
 
@@ -958,6 +1007,48 @@ Location: Asia/Kolkata
         return f"Perfect! {service_info['title']} it is."
 
     @function_tool
+    async def accept_upsell(
+        self,
+        context: RunContext,
+        primary_service: Annotated[str, "The original service already chosen (e.g. 'Haircut')"],
+        addon_service: Annotated[str, "The addon service user just agreed to (e.g. 'Beard Trim')"],
+    ):
+        """Call this when user AGREES to an upsell suggestion."""
+        fsm_ctx = context.session.fsm.ctx
+        combo = find_combo_service(primary_service, addon_service)
+
+        if combo:
+            context.session.fsm.update_state(intent="upsell_accepted", data={"service": combo["title"]})
+            return (
+                f"SYSTEM: Upsell accepted. Service updated to combo: '{combo['title']}' "
+                f"({combo['duration']} min). Tell user you've added {addon_service} and continue."
+            )
+
+        primary_info = find_service_by_name(primary_service)
+        addon_info = find_service_by_name(addon_service)
+
+        if primary_info and addon_info:
+            current_addons = getattr(fsm_ctx, "pending_addons", [])
+            current_addons.append(addon_info["title"])
+            fsm_ctx.pending_addons = current_addons
+            context.session.fsm.update_state(intent="upsell_accepted")
+            return (
+                f"SYSTEM: No combo found. Book separately: '{primary_info['title']}' "
+                f"({primary_info['duration']} min) then '{addon_info['title']}' ({addon_info['duration']} min)."
+            )
+
+        return f"SYSTEM: Could not find '{addon_service}'. Continue with original '{primary_service}' booking."
+
+    @function_tool
+    async def decline_upsell(
+        self,
+        context: RunContext,
+    ):
+        """Call this when user says NO to an upsell. e.g. 'no thanks', 'just the haircut', 'skip'"""
+        context.session.fsm.update_state(intent="upsell_declined")
+        return "No problem, let's continue with your original booking."
+
+    @function_tool
     async def input_date(
         self,
         context: RunContext,
@@ -1007,9 +1098,17 @@ Location: Asia/Kolkata
     async def input_phone(
         self,
         context: RunContext,
-        phone: Annotated[str, "Phone number provided by user"],
+        phone: Annotated[str, "Raw phone number exactly as spoken/heard — ALWAYS pass as-is, even with hyphens, spaces, commas like '98765-43210' or '987 654 3210'. Never clean it yourself."],
     ):
-        """Capture the user's phone number."""
+        """
+        Capture the user's phone number.
+        CRITICAL: Call this tool IMMEDIATELY whenever the user says any sequence of digits 
+        that resembles a phone number — regardless of format. 
+        '98765-43210', '987 654 3210', '98765,43210', '9876543210' are ALL valid inputs.
+        Do NOT ask the user to repeat or reformat their number. Just call this tool with whatever was said.
+        The system handles all cleaning internally.
+        """
+
         normalized = normalize_phone(phone)
 
         # Capture state BEFORE update_state changes it
@@ -1077,7 +1176,7 @@ Location: Asia/Kolkata
 
             context.session.fsm.state = State.OTP_VERIFY
 
-            return "Phone noted. I've sent a verification code to your email. Please share the 6-digit code."
+            return "Phone noted. I've sent a verification code to your email."
 
         return "Got your phone number."
 
@@ -1105,30 +1204,47 @@ Location: Asia/Kolkata
         self,
         context: RunContext,
     ):
-        """List all available services from Cal.com."""
-        try:
-            await fetch_event_types(force_refresh=True)
-            services = get_all_services()
-            
-            if not services:
-                return "I couldn't fetch the available services right now."
-            
-            service_list = []
-            for service in services:
-                service_list.append(f"{service['title']} ({service['duration']} min)")
-            
-            
-            full_list = ', '.join(service_list)
-            return (
-                f"Available services (internal list): {full_list}. "
-                "(SYSTEM NOTE: Do NOT read this full list to the user. "
-                "Instead, say exactly: 'We offer haircut, hairwash, spa, makeup, beard trim and more.' "
-                "**IMPORTANT**: If the user identifies as female (e.g. 'I'm a girl'), REMOVE 'beard trim' from this list when speaking.)"
-            )
-        except Exception as e:
-            logger.error(f"Error listing services: {e}")
-            return "I couldn't fetch the service list right now."
+        """List all available services from Cal.com, grouped by category."""
+        await fetch_event_types(force_refresh=True)
+        services = get_all_services()
 
+        if not services:
+            return "I couldn't fetch the available services right now."
+
+        # ── Build categories dynamically from Cal.com titles ──────────
+        # Cal.com event titles often look like "Hair - Haircut 30min"
+        # or just "Facial" or "Beard Trim". We extract the part before
+        # the first " - " as the category; if no dash, use the full title.
+        categories: dict[str, list[str]] = {}
+        for svc in services:
+            title = svc["title"]
+            if " - " in title:
+                category, name = title.split(" - ", 1)
+            else:
+                category = title        # treat the whole title as its own category
+                name = title
+            category = category.strip()
+            name = name.strip()
+            categories.setdefault(category, []).append(name)
+
+        # Build a natural spoken summary e.g. "Hair (Haircut, Colour), Facial, Spa"
+        category_summary = ", ".join(
+            f"{cat} ({', '.join(names)})" if len(names) > 1 else cat
+            for cat, names in categories.items()
+        )
+
+        # All raw titles for the agent's internal reference (for matching)
+        all_titles = ", ".join(s["title"] for s in services)
+
+        return (
+            f"[INTERNAL — do NOT read verbatim] Available service categories: {category_summary}. "
+            f"Raw titles for booking lookup: {all_titles}. "
+            "INSTRUCTION: When the user asks what services we offer, mention only the CATEGORY NAMES "
+            "in a natural conversational way — e.g. 'We do hair treatments, facials, and spa services.' "
+            "Do NOT list every individual service or duration. "
+            "If the user asks for more detail about a specific category, then describe that category only."
+        )
+    
     @function_tool
     async def create_booking(
         self,

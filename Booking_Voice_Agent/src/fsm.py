@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 class State(Enum):
     START = auto()
@@ -15,6 +16,7 @@ class State(Enum):
     BOOKING_ASK_SERVICE = auto()
     BOOKING_ASK_DATE = auto()
     BOOKING_ASK_TIME = auto()
+    BOOKING_UPSELL = auto()   
     BOOKING_ASK_PHONE = auto()
     BOOKING_CONFIRM = auto()
     
@@ -48,6 +50,11 @@ class ConversationContext:
         # 🔐 Resend protection
         self.otp_last_sent_at = None
         self.otp_resend_count = 0
+        # 🛍️ Upsell tracking
+        self.pending_addons: list = []           # addons user agreed to (no combo found)
+        self.upsell_count: int = 0               # how many upsells have been suggested
+        self.upsell_accepted: bool = False       # did user accept any upsell?
+        self.upsell_combo_applied: bool = False  # was a combo event type found and applied?
 
 class FSM:
     def __init__(self):
@@ -68,6 +75,16 @@ class FSM:
         # --- BOOKING ---
         if self.state == State.BOOKING_ASK_SERVICE:
             return base + " Ask the user 'What service would you like to book?'. You can call `list_available_services` to see what is offered. If the user specifies a service, call `input_service`."
+            
+        # ── ADD HERE ──────────────────────────────────────────────
+        if self.state == State.BOOKING_UPSELL:
+            return base + (
+                f" The user has chosen '{self.ctx.service}'. You just suggested an addon. "
+                "Wait for the user's yes/no. "
+                "If YES → call `accept_upsell`. "
+                "If NO → proceed to ask for date/time. "
+                "Do NOT call `create_booking` yet."
+            )
 
         if self.state == State.BOOKING_ASK_DATE:
             msg = base + f" Service: {self.ctx.service}. Ask 'What day works for you?'. When user provides a date, call `input_date`. CRITICAL: Whenever a date is mentioned, you should plan to use `get_availability` immediately after."
@@ -121,7 +138,7 @@ class FSM:
         if self.state == State.OTP_SENT:
             return base + (
                 "Tell the user that an OTP was sent to their email. "
-                "Ask them to say the 6-digit code. "
+                "Ask them to say the code. "
                 "If they ask to resend, call `resend_otp`."
             )
 
@@ -135,6 +152,28 @@ class FSM:
 
         return base + " How can I help?"
 
+    def get_silence_prompt(self) -> str:
+        """
+        Returns a state-aware nudge when the user goes silent.
+        """
+        prompts = {
+            State.OTP_VERIFY: "Still waiting for that code... did you get it?",
+            State.OTP_SENT: "Did you receive the OTP on your email?",
+            State.OTP_ASK_EMAIL: "Could you share your email address?",
+            State.BOOKING_ASK_PHONE: "I just need your phone number to continue...",
+            State.BOOKING_CONFIRM: "So... should I go ahead and book it?",
+            State.BOOKING_ASK_SERVICE: "What service were you looking for?",
+            State.BOOKING_ASK_DATE: "What day works for you?",
+            State.BOOKING_ASK_TIME: "What time were you thinking?",
+            State.CANCEL_CONFIRM: "Did you want to go ahead with the cancellation?",
+            State.MANAGE_ASK_PHONE: "I'll need your phone number to find the booking...",
+            State.MANAGE_SELECT_BOOKING: "Which appointment did you want to select?",
+            State.RESCHEDULE_ASK_DATE: "What new date works for you?",
+            State.RESCHEDULE_ASK_TIME: "What time would you prefer?",
+            State.RESCHEDULE_CONFIRM: "Should I go ahead with the reschedule?",
+        }
+        return prompts.get(self.state, "Hello? Are you still there?")
+
     def update_state(self, intent: str = None, data: Dict[str, Any] = None):
         """
         Transitions the state based on logic.
@@ -146,7 +185,14 @@ class FSM:
         
         if data is None:
             data = {}
-            
+
+        # ── Universal: allow service to be updated from any state (upsell combo applied)
+        if "service" in data and self.state not in (State.START, State.MANAGE_ASK_PHONE):
+            self.ctx.service = data["service"]
+            self.ctx.upsell_accepted = True
+            self.ctx.upsell_combo_applied = True
+            logger.info(f"FSM: Service updated mid-flow to '{data['service']}' (upsell combo)")
+
         # START intent handling
         if self.state == State.START and intent:
             if intent == "book":
@@ -185,7 +231,15 @@ class FSM:
         elif self.state == State.BOOKING_ASK_PHONE and "phone" in data:
             self.ctx.phone = data["phone"]
             self.state = State.OTP_ASK_EMAIL
-            
+
+        # ── ADD HERE ──────────────────────────────────────────────
+        elif self.state == State.BOOKING_UPSELL:
+            if intent == "upsell_accepted":
+                self.ctx.upsell_accepted = True
+                self.state = State.BOOKING_ASK_DATE
+            elif intent == "upsell_declined":
+                self.state = State.BOOKING_ASK_DATE
+
         # OTP FLOW
         elif self.state == State.OTP_ASK_EMAIL and "email" in data:
             self.ctx.email = data["email"]

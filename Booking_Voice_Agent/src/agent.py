@@ -707,6 +707,14 @@ Always say a brief natural phrase BEFORE calling any tool (3-7 words, match user
 - `reschedule_booking` → "Let me move that for you..."
 Never say "calling the function" or "using the API".
 
+## PHONE NUMBER COLLECTION
+- Indian mobile numbers are always 10 digits.
+- When user gives digits in parts/chunks, WAIT until all 10 digits are spoken before calling `input_phone`.
+- Count digits mentally. Only call `input_phone` ONCE with the complete number.
+- NEVER call `input_phone` with fewer than 10 digits — the tool will reject it and you'll have wasted a turn.
+- '98765-43210', '987 654 3210', '98765,43210' are all valid — pass as-is, tool cleans it internally.
+
+
 ## OTHER RULES
 - Do NOT ask for the user's name.
 - Do NOT ask for email — system maps it from phone automatically.
@@ -976,12 +984,22 @@ Never say "calling the function" or "using the API".
     ):
         """
         Capture the user's phone number.
-        CRITICAL: Call this tool IMMEDIATELY whenever the user says any sequence of digits 
-        that resembles a phone number — regardless of format. 
-        '98765-43210', '987 654 3210', '98765,43210', '9876543210' are ALL valid inputs.
-        Do NOT ask the user to repeat or reformat their number. Just call this tool with whatever was said.
-        The system handles all cleaning internally.
+        CRITICAL: Only call this tool when you have collected a complete 10-digit Indian mobile number.
+        If user says digits in chunks/parts, accumulate them and call this ONCE with the full number.
+        Do NOT call with partial numbers like '987' or '98765'.
         """
+
+    # Strip everything non-digit to count actual digits received
+        digits_only = "".join(filter(str.isdigit, phone))
+
+    # Guard: reject if we don't have enough digits for a valid Indian mobile number
+        if len(digits_only) < 10:
+            logger.warning(f"input_phone called with partial number: {phone!r} ({len(digits_only)} digits)")
+            return (
+                f"[INTERNAL] Only got {len(digits_only)} digits so far ({phone}). "
+                f"The user is still giving their number. Do NOT call this tool again until you have all 10 digits. "
+                f"Wait for them to finish speaking."
+            )
 
         normalized = normalize_phone(phone)
 

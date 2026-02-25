@@ -99,7 +99,7 @@ class FSM:
             return base + " Ask for PHONE NUMBER to finalize the booking. When provided, call `input_phone`."
             
         if self.state == State.BOOKING_CONFIRM:
-            return base + f" details: Service={self.ctx.service}, Date={self.ctx.date}, Time={self.ctx.time}, Phone={self.ctx.phone}. Confirm with the user: 'Just to confirm, I'm booking [Service] on [Date] at [Time] for [Phone]. Should I go ahead?'. If yes, call `create_booking` with the gathered details."
+            return base + f" details: Service={self.ctx.service}, Date={self.ctx.date}, Time={self.ctx.time}, Phone={self.ctx.phone}. Confirm with the user: 'Just to confirm, I'm booking [Service] on [Date] at [Time]. Should I go ahead?'. If yes, call `create_booking` with the gathered details."
 
         # --- MANAGE (List) ---
         if self.state == State.MANAGE_ASK_PHONE:

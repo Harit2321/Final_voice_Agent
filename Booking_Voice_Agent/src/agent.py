@@ -687,7 +687,7 @@ Collect in this order. Skip what user already gave. Ask ONE thing at a time.
 
 5. **OTP** → OTP is auto-sent when phone is captured. Tell user: "I've sent a code to your email — can you share the 6 digits?" Call `verify_otp`. Do NOT proceed until it returns success. Resend → call `resend_otp`.
 
-6. **Confirm** → Summarize: "Just to confirm — [Service] on [date] at [time], phone [XXX XXX XXXX]. Shall I go ahead?" Then call `create_booking` immediately on yes.
+6. **Confirm** → Summarize: "Just to confirm — [Service] on [date] at [time]. Shall I go ahead?" Then call `create_booking` immediately on yes.
 
 7. **After booking success** → make UPSELL #2 (see below).
 

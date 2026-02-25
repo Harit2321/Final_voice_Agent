@@ -689,9 +689,20 @@ You have a warm Indian English accent and a relaxed, friendly style. You speak t
 - Auto-detect user's language. ALWAYS reply in the same language they last used — no exceptions.
 - Tool results = internal notes. NEVER read them aloud. Rephrase naturally in the user's language.
 - Tags [INTERNAL] and [SYSTEM NOTE] = never speak, only act on them.
+- Tool return values that start with [INTERNAL] are instructions — translate the ACTION into the user's language, never the words themselves.
+- When in Hindi/Hinglish mode, ALL spoken responses must be in Hindi/Hinglish — even after tool calls.
+- NEVER slip back into English mid-conversation if user is speaking Hindi/Hinglish.
 
 **English**: normal digits and time ("5:00 PM", "30 min").
-**Hindi/Hinglish**: casual everyday speech. Keep English words for Booking, Service, Time, Date, Phone, Available, Confirm. Spell out all numbers in Hindi words (paanch, das…). Never use "baje". Never use formal Hindi (uplabdh, pushti, kripya).
+**Hindi/Hinglish**: casual everyday speech. Keep English words for Booking, Service, Time, Date, Phone, Available, Confirm. Never use formal Hindi (uplabdh, pushti, kripya).
+
+**Hindi/Hinglish number rules — follow exactly:**
+- TIME → keep as digits, say AM/PM in English: "3 PM", "10 AM", "saade teen PM" is fine too
+- DATES → say naturally: "kal", "parso", "mangalwar", "25 tarik" — never say "2025-01-25"
+- PRICES → Hindi words or digits both fine: "do sau rupaye" or "200 rupaye"
+- PHONE digits → when reading back a number, spell each digit in Hindi: "nau aath saat chhe paanch..."
+- COUNTS/SLOTS → Hindi words: "do slot hain", "teen options hain", "ek minute"
+- DURATION → Hindi: "bees minute lagenge", "aadha ghanta"
 **All modes**: Say dates as "January 2nd" not "2024-01-02". Phone numbers: group last 10 digits as 3-3-4 with spaces ("987 654 3210"), drop +91 prefix.
 
 ## TONE — SOUND LIKE A REAL HUMAN WHO LOVES THEIR JOB
@@ -734,7 +745,7 @@ Collect in this order. Skip what user already gave. Ask ONE thing at a time. Nev
 
 6. **Confirm** → Sound excited for them: "Okay so just to confirm — [Service] on [Date] at [Time]. Should I go ahead and lock that in?" Call `create_booking` immediately on yes.
 
-7. **After booking** → Celebrate it! "You're all booked! 🎉 See you on [date] at [time]. Looking forward to having you in!" Then make UPSELL #2.
+7. **After booking** → Celebrate it! "You're all booked! See you on [date] at [time] — we're looking forward to having you in!" Then make UPSELL #2.
 
 ## UPSELLING — FEEL NATURAL, NOT PUSHY
 Max 2 suggestions per call. Never feel like a sales pitch. Sound like a friend giving a tip.
@@ -762,11 +773,16 @@ Stop suggesting the moment user sounds even slightly disinterested.
 - `reschedule_booking` → "Sure, let me move that for you..."
 
 ## PHONE NUMBER COLLECTION
-- Indian mobile numbers are always 10 digits.
-- When user gives digits in parts/chunks, WAIT until all 10 digits are spoken before calling `input_phone`.
-- Count digits mentally. Only call `input_phone` ONCE with the complete number.
-- NEVER call `input_phone` with fewer than 10 digits.
-- '98765-43210', '987 654 3210', '98765,43210' are all valid — pass as-is, tool cleans it internally.
+- Mobile numbers are always 10 digits.
+- User may give number in ANY format — grouped, hyphenated, word by word, or all at once:
+  - "123-456-7890" → pass as "123-456-7890"
+  - "123, 456, 7890" → pass as "123-456-7890"
+  - "one two three four five six seven eight nine zero" → convert to "1234567890"
+  - "nine eight seven... six five four... three two one zero" → wait for all digits, then pass "9876543210"
+- YOUR JOB: mentally assemble ALL spoken digit groups into ONE complete string BEFORE calling `input_phone`.
+- Count digits. Only call `input_phone` when you have exactly 10 digits assembled.
+- NEVER call `input_phone` mid-number. NEVER call it with fewer than 10 digits.
+- The tool handles all cleaning internally — just pass whatever you assembled.
 
 ## EMOTIONS & EDGE CASES
 - User sounds excited? Match their energy! 
@@ -818,7 +834,7 @@ Stop suggesting the moment user sounds even slightly disinterested.
             elapsed = (now - otp_last_sent_at).total_seconds()
             if elapsed < OTP_RESEND_COOLDOWN_SECONDS:
                 wait = int(OTP_RESEND_COOLDOWN_SECONDS - elapsed)
-                return f"Please wait {wait} seconds before I resend the code."
+                return f"[INTERNAL] OTP resend on cooldown. Tell user warmly to wait about {wait} more seconds before trying again."
 
         # ✅ Resend allowed
         otp = generate_otp()
@@ -882,8 +898,7 @@ Stop suggesting the moment user sounds even slightly disinterested.
     ):
         """User wants to cancel, update, or reschedule an existing appointment."""
         context.session.fsm.update_state(intent="cancel")  # Will be refined by user
-        return "I can help with that. What's your phone number?"
-
+        return "[INTERNAL] User wants to manage a booking. Ask for their phone number warmly."
     @function_tool
     async def input_service(
     self,
@@ -1048,7 +1063,8 @@ Stop suggesting the moment user sounds even slightly disinterested.
     async def input_phone(
         self,
         context: RunContext,
-        phone: Annotated[str, "Raw phone number exactly as spoken/heard — ALWAYS pass as-is, even with hyphens, spaces, commas like '98765-43210' or '987 654 3210'. Never clean it yourself."],
+        phone: Annotated[str, "Complete phone number — join ALL digit groups the user spoke into ONE string before passing. If user said '123, 456, 7890' pass it as '123-456-7890'. If user said 'one two three four five six seven eight nine zero' convert to '1234567890'. Include hyphens or spaces between groups if present. NEVER pass partial digits."],
+
     ):
         """
         Capture the user's phone number.
@@ -1394,40 +1410,43 @@ Stop suggesting the moment user sounds even slightly disinterested.
             duration_mins = service_info.get("lengthInMinutes", 30)
             matched.sort()
 
-            ranges = []
-            if matched:
-                range_start = matched[0]
-                range_end   = matched[0] + timedelta(minutes=duration_mins)
-                for prev, curr in zip(matched, matched[1:]):
-                    gap = (curr - (prev + timedelta(minutes=duration_mins))).total_seconds() / 60
-                    if gap <= 5:  # consecutive (allow tiny rounding gaps)
-                        range_end = curr + timedelta(minutes=duration_mins)
-                    else:         # gap found → booked block in between
-                        ranges.append((range_start, range_end))
-                        range_start = curr
-                        range_end   = curr + timedelta(minutes=duration_mins)
-                ranges.append((range_start, range_end))
-
             def fmt(d):
                 return d.strftime("%I:%M %p").lstrip("0")
 
+            # Build open windows (ranges of consecutive slots)
+            ranges = []
+            if matched:
+                range_start = matched[0]
+            range_end   = matched[0] + timedelta(minutes=duration_mins)
+            for prev, curr in zip(matched, matched[1:]):
+                gap = (curr - (prev + timedelta(minutes=duration_mins))).total_seconds() / 60
+                if gap <= 5:
+                    range_end = curr + timedelta(minutes=duration_mins)
+                else:
+                    ranges.append((range_start, range_end))
+                    range_start = curr
+                    range_end   = curr + timedelta(minutes=duration_mins)
+            ranges.append((range_start, range_end))
+
+            # Build all_slots string for internal validation only (never spoken)
             all_slots_str = ", ".join(s.strftime("%I:%M %p") for s in matched)
 
+            # Build a human-friendly window description — NO individual slot times
             if len(ranges) == 1:
-                # Single continuous block → "fully free from X to Y"
-                reply = f"That day is fully open from {fmt(ranges[0][0])} to {fmt(ranges[0][1])}."
+                open_window = f"from {fmt(ranges[0][0])} to {fmt(ranges[0][1])}"
             else:
-                # Multiple windows → describe each free window
                 window_strs = [f"{fmt(rs)} to {fmt(re)}" for rs, re in ranges]
-                windows_text = ", and ".join([", ".join(window_strs[:-1]), window_strs[-1]]) if len(window_strs) > 1 else window_strs[0]
-                reply = f"We have openings from {windows_text} on that day."
+                open_window = " and ".join(window_strs)
 
             return (
-                f"[INTERNAL] Availability data: {note_prefix}{reply} "
-                f"all_slots={all_slots_str}; "
-                "Tell the user these available times naturally in their language. "
-                "If user requests a specific time NOT in this list, suggest the NEAREST available times. "
-                "Accept ANY time from the full list if user requests it."
+                f"[INTERNAL] "
+                f"Available window: {open_window}. "
+                f"Full slot list (for validation ONLY — NEVER read aloud): {all_slots_str}. "
+                "INSTRUCTIONS: Tell the user the open window naturally, like 'We're pretty open from 10 AM to 6 PM — what time works for you?' "
+                "NEVER list individual slot times. NEVER say specific times unless the user asks. "
+                "Just describe the open window and let the user pick any time within it. "
+                "When user gives a time, check it against the full slot list silently and confirm if it's available. "
+                "If their time is not in the list, say the window is open but that exact minute isn't free, and ask them to pick another time within the window."
             )
 
         except Exception as e:

@@ -68,8 +68,7 @@ class FSM:
         """
         from datetime import datetime
         now = datetime.now()
-        base = f"You are Zara, a state-aware calendar assistant for TSC Salon. The usage location is Asia/Kolkata and today is {now.strftime('%A, %d %B %Y')}. Your main goal is to help users manage salon appointments. If the user asks about ANYTHING else, politely decline."
-        
+        base = f"You are {agent_name if hasattr(self, '_agent_name') else 'Zara'}, a warm and friendly voice receptionist. You're chatting with a real person on a call and you genuinely want them to have a great experience. Today is {now.strftime('%A, %d %B %Y')}, timezone Asia/Kolkata. Stay in character — warm, natural, human. If asked anything off-topic, kindly redirect."        
         if self.state == State.START:
             return base + " Greet the user. If they want to book, call `intent_book`. If they want to update/cancel, call `intent_manage`. Do not ask for details yet."
             
@@ -168,22 +167,20 @@ class FSM:
         Returns a state-aware nudge when the user goes silent.
         """
         prompts = {
-            State.START: "Hello! How can I help you with your booking today?",
-            State.OTP_VERIFY: "Still waiting for that code... did you get it?",
-            State.OTP_SENT: "Did you receive the OTP on your email?",
-            State.OTP_ASK_EMAIL: "Could you share your email address?",
-            State.BOOKING_ASK_PHONE: "I just need your phone number to continue...",
-            State.BOOKING_CONFIRM: "So... should I go ahead and book it?",
-            State.BOOKING_ASK_SERVICE: "What service were you looking for?",
-            State.BOOKING_ASK_DATE: "What day works for you?",
-            State.BOOKING_ASK_TIME: "What time were you thinking?",
-            State.CANCEL_CONFIRM: "Did you want to go ahead with the cancellation?",
-            State.MANAGE_ASK_PHONE: "I'll need your phone number to find the booking...",
-            State.MANAGE_SELECT_BOOKING: "Which appointment did you want to select?",
-            State.RESCHEDULE_ASK_DATE: "What new date works for you?",
-            State.RESCHEDULE_ASK_TIME: "What time would you prefer?",
-            State.RESCHEDULE_CONFIRM: "Should I go ahead with the reschedule?",
-        }
+        State.OTP_SENT: "Hey, did the code come through okay?",
+        State.OTP_ASK_EMAIL: "Still with me? Just need your email when you're ready.",
+        State.BOOKING_ASK_PHONE: "Just need your number and we're almost done!",
+        State.BOOKING_CONFIRM: "Should I go ahead and book that in for you?",
+        State.BOOKING_ASK_SERVICE: "What were you thinking of getting done today?",
+        State.BOOKING_ASK_DATE: "Any particular day work for you?",
+        State.BOOKING_ASK_TIME: "What time's good for you?",
+        State.CANCEL_CONFIRM: "Did you want to go ahead and cancel?",
+        State.MANAGE_ASK_PHONE: "Just need your number to find your booking.",
+        State.MANAGE_SELECT_BOOKING: "Which one did you want to pick?",
+        State.RESCHEDULE_ASK_DATE: "What new date works for you?",
+        State.RESCHEDULE_ASK_TIME: "What time were you thinking?",
+        State.RESCHEDULE_CONFIRM: "Should I go ahead and move that booking?",
+    }
         return prompts.get(self.state, "Hello? Are you still there?")
 
     def update_state(self, intent: str = None, data: Dict[str, Any] = None):

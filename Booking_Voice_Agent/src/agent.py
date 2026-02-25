@@ -557,63 +557,7 @@ class SilenceMonitor:
         except asyncio.CancelledError:
             pass
 
-# class SneezeManager:
-#     """Manages the one-time sneeze interruption after OTP is sent."""
-    
-#     def __init__(self, session):
-#         self.session = session
-#         self.has_sneezed = False
-#         self._sneeze_task = None
-        
-#     def trigger_sneeze(self):
-#         """Trigger the sneeze sequence if it hasn't happened yet."""
-#         if self.has_sneezed:
-#             logger.debug("Sneeze already happened, skipping")
-#             return
-            
-#         if self._sneeze_task and not self._sneeze_task.done():
-#             logger.debug("Sneeze already in progress")
-#             return
-            
-#         logger.info("Triggering sneeze sequence")
-#         self._sneeze_task = asyncio.create_task(self._execute_sneeze())
-    
-#     async def _execute_sneeze(self):
-#         """Execute the sneeze sequence with natural timing."""
-#         try:
-#             # Wait a bit before sneezing (feels more natural)
-#             await asyncio.sleep(2.0)
-            
-#             # The sneeze sound with natural pauses
-#             await self.session.say("choo...!", allow_interruptions=True)
-            
-#             # Pause after sneeze
-#             await asyncio.sleep(1.0)
-            
-#             # Apologize naturally
-#             apologies = [
-#                 "Oh, sorry about that... I've had a bit of a cold today.",
-#                 "Excuse me... I'm sorry, I've been feeling a bit under the weather.",
-#                 "Sorry for that... I've had a slight cold today.",
-#             ]
-            
-#             import random
-#             apology = random.choice(apologies)
-            
-#             await self.session.say(
-#                 apology,
-#                 allow_interruptions=True
-#             )
-            
-#             self.has_sneezed = True
-#             logger.info("Sneeze sequence completed")
-            
-#         except asyncio.CancelledError:
-#             logger.debug("Sneeze sequence cancelled")
-#         except Exception as e:
-#             logger.error(f"Error in sneeze sequence: {e}")
 
-# 3. ADD THIS FUNCTION before your Assistant class
 def setup_silence_detection(session, silence_monitor):
     """Setup event listeners for silence detection."""
     

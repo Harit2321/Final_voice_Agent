@@ -1068,13 +1068,15 @@ Stop suggesting the moment user sounds even slightly disinterested.
     ):
         """
         Capture the user's phone number.
-        CRITICAL: Only call this tool when you have collected a complete 10-digit Indian mobile number.
-        If user says digits in chunks/parts, accumulate them and call this ONCE with the full number.
-        Do NOT call with partial numbers like '987' or '98765'.
+        CRITICAL: If user said '123-456-7890', pass the ENTIRE string '123-456-7890' as one argument.
+        NEVER split it. NEVER call this tool 3 times for a hyphenated number.
+        One number = one tool call, always.
         """
 
     # Strip everything non-digit to count actual digits received
+        logger.info(f"📞 input_phone received raw: {phone!r}")
         digits_only = "".join(filter(str.isdigit, phone))
+        logger.info(f"📞 input_phone digits extracted: {digits_only!r} (count={len(digits_only)})")
 
     # Guard: reject if we don't have enough digits for a valid Indian mobile number
         if len(digits_only) < 10:

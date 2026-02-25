@@ -218,6 +218,43 @@ def get_all_services():
         services.append(service_info)
     
     return services
+def group_services_by_category() -> dict[str, list[dict]]:
+    """
+    Groups services by their category prefix.
+    Cal.com titles follow the pattern "Category - Style".
+    Returns: {"Hair": [service1, service2], "Beard": [...], ...}
+    """
+    services = get_all_services()
+    categories: dict[str, list[dict]] = {}
+    
+    for svc in services:
+        title = svc.get("title", "")
+        if " - " in title:
+            category, style = title.split(" - ", 1)
+            category = category.strip()
+            svc["style"] = style.strip()  # attach the style name to the service
+        else:
+            category = title.strip()
+            svc["style"] = None  # no subcategory
+        
+        categories.setdefault(category, []).append(svc)
+    
+    return categories
+
+
+def find_category_by_name(category_name: str) -> list[dict] | None:
+    """
+    Given a broad category like 'hair' or 'beard', returns all matching sub-services.
+    Returns None if only one service matches (no sub-selection needed).
+    """
+    categories = group_services_by_category()
+    name_lower = category_name.lower().strip()
+    
+    for cat_key, services in categories.items():
+        if name_lower in cat_key.lower() or cat_key.lower() in name_lower:
+            return services  # could be 1 or many
+    
+    return None
 
 
 def find_service_by_name(service_name: str):
@@ -673,8 +710,12 @@ BANNED phrases: "How can I assist you?", "Please provide", "I have successfully"
 ## BOOKING FLOW
 Collect in this order. Skip what user already gave. Ask ONE thing at a time.
 
-1. **Service** → call `input_service`. Then make UPSELL #1 (see below).
-   - After service confirmed, ask: "Any specific day in mind, or should I check availability?"
+1. **Service** → call `input_service` with whatever the user said (e.g. "haircut", "beard trim", "fade").
+   - If tool returns a list of styles to choose from → present them naturally and WAIT for user's style pick.
+     Example: "We have a few beard options — Clean Shave or Beard Trim. Which one would you like?"
+   - If tool confirms a specific service → make UPSELL #1 (see below), then ask about date.
+   - NEVER ask for date/time until a specific service (not just a category) is confirmed.
+   - After style is picked by user → call `input_service` again with the SPECIFIC style name.
 
 2. **Date** → If user gives a date, call `get_availability` immediately.
    - No date given → call `check_available_days`.
@@ -834,27 +875,66 @@ Never say "calling the function" or "using the API".
 
     @function_tool
     async def input_service(
-        self,
-        context: RunContext,
-        service: Annotated[str, "Service name provided by user"],
+    self,
+    context: RunContext,
+    service: Annotated[str, "Service name or category provided by user (e.g. 'haircut', 'beard', 'Hair - Fade')"],
     ):
-        """Capture the service the user wants to book."""
-        # Validate service exists
+        """
+        Capture the service or category the user wants to book.
+        If user gives a broad category (e.g. 'haircut', 'beard') and multiple styles exist,
+        returns the list of options so the agent asks the user to pick one.
+        If user gives a specific style, confirms and stores it.
+        """
+    # STEP A: Try to find an exact/specific service match first
         service_info = find_service_by_name(service)
-        if not service_info:
-            services = get_all_services()
-            available = ", ".join([s['title'] for s in services])
-            return f"I couldn't find '{service}'. Available services: {available}"
-        
-        # Update FSM with validated service
-        context.session.fsm.update_state(data={"service": service_info["title"]})
-        all_services = get_all_services()
-        other_services = [s['title'] for s in all_services if s['title'].lower() != service_info['title'].lower()]
+    
+        if service_info:
+            # Exact match found — store it and proceed
+            context.session.fsm.update_state(data={"service": service_info["title"]})
+            all_services = get_all_services()
+            other_services = [s['title'] for s in all_services if s['title'].lower() != service_info['title'].lower()]
+            return (
+                f"[INTERNAL] Service confirmed: {service_info['title']} ({service_info['duration']} min). "
+                f"Available upsell options: {', '.join(other_services)}. "
+                f"Pick the most complementary one for upsell. Never suggest outside this list."
+            )
+    
+    # STEP B: No exact match — try category-level match
+        category_services = find_category_by_name(service)
+    
+        if category_services and len(category_services) > 1:
+            # Multiple styles exist — ask the user to pick
+            style_options = [
+                f"{svc.get('style', svc['title'])} (₹{svc.get('price', '?')}, {svc['duration']} min)"
+                for svc in category_services
+            ]
+            options_str = ", ".join([svc.get('style', svc['title']) for svc in category_services])
+            return (
+                f"[INTERNAL] Category '{service}' has multiple styles. "
+                f"Ask user to choose one: {options_str}. "
+                f"Do NOT proceed to date/time yet. Wait for their style choice."
+            )
+    
+        elif category_services and len(category_services) == 1:
+            # Only one service in this category — auto-select it
+            svc = category_services[0]
+            context.session.fsm.update_state(data={"service": svc["title"]})
+            all_services = get_all_services()
+            other_services = [s['title'] for s in all_services if s['title'].lower() != svc['title'].lower()]
+            return (
+                f"[INTERNAL] Only one option in '{service}' category: {svc['title']} ({svc['duration']} min). "
+                f"Auto-selected. Upsell options: {', '.join(other_services)}."
+            )
+    
+        # STEP C: Nothing matched at all
+        services = get_all_services()
+        categories = group_services_by_category()
+        available_categories = list(categories.keys())
         return (
-            f"Perfect! {service_info['title']} it is. "
-            f"[INTERNAL] Available services you can suggest as upsell: {', '.join(other_services)}. "
-            f"Pick the most complementary one. Never suggest anything outside this list."
-        )   
+            f"I couldn't find '{service}'. "
+            f"Available categories: {', '.join(available_categories)}. "
+            f"Ask user which category they want."
+        )
 
     @function_tool
     async def accept_upsell(

@@ -57,6 +57,7 @@ class ConversationContext:
         self.upsell_combo_applied: bool = False  # was a combo event type found and applied?
 
 class FSM:
+    
     def __init__(self):
         self.state = State.START
         self.ctx = ConversationContext()
@@ -111,9 +112,19 @@ class FSM:
         if self.state == State.CANCEL_CONFIRM:
             if self.ctx.intent == "cancel_all":
                 count = len(self.ctx.bookings_list)
-                return base + f" Warn the user they are about to cancel {count} appointments. Ask 'Are you sure you want to cancel ALL appointments?'. Call `cancel_booking` for each appointment if yes."
-            return base + " Ask 'Are you sure you want to cancel this appointment?'. Call `cancel_booking` if yes."
-
+                return base + (
+                    f" Warn the user they are about to cancel {count} appointments. "
+                    "STEP 1: Ask 'Are you sure you want to cancel ALL of them?' "
+                    "STEP 2: If yes, ask 'May I ask why you'd like to cancel?' and WAIT for their reason. "
+                    "STEP 3: Only AFTER getting the reason, call `cancel_booking` for each appointment passing the reason they gave. "
+                    "NEVER call `cancel_booking` without a real reason from the user."
+                )
+            return base + (
+                " STEP 1: Ask 'Are you sure you want to cancel this appointment?' "
+                " STEP 2: If yes, ask 'May I ask why you'd like to cancel?' and WAIT for their answer. "
+                " STEP 3: Only AFTER getting the reason, call `cancel_booking` with the reason they gave. "
+                " NEVER skip asking for the reason. NEVER call `cancel_booking` with a default or assumed reason."
+            )
         # --- RESCHEDULE ---
         if self.state == State.RESCHEDULE_ASK_SERVICE:
              return base + " To reschedule, we need to create a new booking. Ask 'What service is this for?' (or confirm if it's the same). Call `input_service`."
@@ -157,6 +168,7 @@ class FSM:
         Returns a state-aware nudge when the user goes silent.
         """
         prompts = {
+            State.START: "Hello! How can I help you with your booking today?",
             State.OTP_VERIFY: "Still waiting for that code... did you get it?",
             State.OTP_SENT: "Did you receive the OTP on your email?",
             State.OTP_ASK_EMAIL: "Could you share your email address?",
@@ -251,6 +263,7 @@ class FSM:
         elif self.state == State.BOOKING_CONFIRM and intent == "confirm":
             # Action should be taken by agent, then reset
             self.state = State.START 
+            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context
             
         # MANAGE FLOW
         elif self.state == State.MANAGE_ASK_PHONE:
@@ -283,6 +296,7 @@ class FSM:
         # SPECIFIC ACTION FLOWS
         elif self.state == State.CANCEL_CONFIRM and intent == "confirm":
             self.state = State.START
+            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context
         
         elif self.state == State.RESCHEDULE_ASK_SERVICE and "service" in data:
             self.ctx.service = data["service"]
@@ -301,6 +315,7 @@ class FSM:
             
         elif self.state == State.RESCHEDULE_CONFIRM and intent == "confirm":
             self.state = State.START
+            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context  
         
         # Log state transition
         if old_state != self.state:

@@ -303,6 +303,56 @@ def find_combo_service(primary_service: str, addon_service: str):
 
     return best
 
+def find_upsell_target(booked_service: str, exclude: str | None = None) -> str | None:
+    """
+    Dynamically find the best upsell target based on what was booked.
+    - Individual service → find a combo that contains its keyword
+    - Combo → find a different combo with least keyword overlap
+    exclude: title already suggested in upsell #1, to avoid repeating it
+    """
+    services = get_all_services()
+    booked_lower = booked_service.lower().strip()
+    is_combo = booked_lower.startswith("combo")
+
+    stop = {"and", "with", "a", "the", "&", "+", "-", "combo", "hair", "full"}
+    booked_keywords = [
+        w for w in re.split(r"[\s\-&+]+", booked_lower)
+        if w not in stop and len(w) > 2
+    ]
+
+    combos = [s for s in services if s["title"].lower().startswith("combo")]
+
+    if not is_combo:
+        # Individual → find combo that contains this service's keyword
+        best = None
+        best_score = 0
+        for combo in combos:
+            combo_lower = combo["title"].lower()
+            if exclude and combo["title"].lower() == exclude.lower():
+                continue
+            score = sum(1 for kw in booked_keywords if kw in combo_lower)
+            if score > best_score:
+                best_score = score
+                best = combo
+        return best["title"] if best else None
+
+    else:
+        # Combo → find a different combo with least keyword overlap
+        best = None
+        best_score = -999
+        for combo in combos:
+            combo_lower = combo["title"].lower()
+            if combo_lower == booked_lower:
+                continue
+            if exclude and combo["title"].lower() == exclude.lower():
+                continue
+            overlap = sum(1 for kw in booked_keywords if kw in combo_lower)
+            score = -overlap  # lower overlap = more different = better upsell #2
+            if score > best_score:
+                best_score = score
+                best = combo
+        return best["title"] if best else None
+
 
 def filter_services_by_project(agent_config: dict | None) -> None:
     """
@@ -695,10 +745,10 @@ Max 2 suggestions per call. Never feel like a sales pitch. Sound like a friend g
 - Call `accept_upsell` if yes, `decline_upsell` if no. Don't push if they say no.
 
 **UPSELL #2** — After booking confirmed:
-- Sound like an afterthought, not a pitch: "Oh and next time — [different service] is something you might really enjoy too. Just a thought!"
-- NEVER suggest what they just booked or anything already in their combo.
+- The [INTERNAL] note from `create_booking` will tell you exactly what to suggest. Follow it precisely.
+- Sound like an afterthought, not a pitch: "Oh and next time — [service from INTERNAL note] is something you might really enjoy too. Just a suggestion!"
 - NEVER suggest beard services to female customers.
-- Skip entirely if nothing genuinely makes sense. Silence beats a weird suggestion.
+- If the INTERNAL note says skip, skip. Silence beats a weird suggestion.
 
 Stop suggesting the moment user sounds even slightly disinterested.
 
@@ -852,12 +902,16 @@ Stop suggesting the moment user sounds even slightly disinterested.
         if service_info:
             # Exact match found — store it and proceed
             context.session.fsm.update_state(data={"service": service_info["title"]})
-            all_services = get_all_services()
-            other_services = [s['title'] for s in all_services if s['title'].lower() != service_info['title'].lower()]
+            upsell_target = find_upsell_target(service_info["title"])
+            if upsell_target:
+                context.session.fsm.ctx.upsell1_suggestion = upsell_target
+            upsell_hint = (
+                f"Suggest upgrading to '{upsell_target}' — it complements what they chose. "
+                f"Call accept_upsell if yes, decline_upsell if no."
+            ) if upsell_target else "No strong upsell match. Skip upsell and ask for date/time."
             return (
                 f"[INTERNAL] Service confirmed: {service_info['title']} ({service_info['duration']} min). "
-                f"Available upsell options: {', '.join(other_services)}. "
-                f"Pick the most complementary one for upsell. Never suggest outside this list."
+                f"{upsell_hint}"
             )
     
     # STEP B: No exact match — try category-level match
@@ -880,11 +934,16 @@ Stop suggesting the moment user sounds even slightly disinterested.
             # Only one service in this category — auto-select it
             svc = category_services[0]
             context.session.fsm.update_state(data={"service": svc["title"]})
-            all_services = get_all_services()
-            other_services = [s['title'] for s in all_services if s['title'].lower() != svc['title'].lower()]
+            upsell_target = find_upsell_target(svc["title"])
+            if upsell_target:
+                context.session.fsm.ctx.upsell1_suggestion = upsell_target
+            upsell_hint = (
+                f"Suggest upgrading to '{upsell_target}' — it complements what they chose. "
+                f"Call accept_upsell if yes, decline_upsell if no."
+            ) if upsell_target else "No strong upsell match. Skip upsell and ask for date/time."
             return (
                 f"[INTERNAL] Only one option in '{service}' category: {svc['title']} ({svc['duration']} min). "
-                f"Auto-selected. Upsell options: {', '.join(other_services)}."
+                f"Auto-selected. {upsell_hint}"
             )
     
         # STEP C: Nothing matched at all
@@ -1217,12 +1276,14 @@ Stop suggesting the moment user sounds even slightly disinterested.
                     context.session.fsm.update_state(intent="confirm")
                     
                     spoken_date = format_spoken_date(dt_local)
-                    all_services = get_all_services()
-                    other_services = [s['title'] for s in all_services if s['title'].lower() != service_info['title'].lower()]
+                    upsell1_already_suggested = getattr(context.session.fsm.ctx, "upsell1_suggestion", None)
+                    upsell_target = find_upsell_target(service_info["title"], exclude=upsell1_already_suggested)
+                    upsell_hint = (
+                        f"Suggest '{upsell_target}' as a next-time idea — genuinely different from what they just booked."
+                    ) if upsell_target else "No closing upsell needed — skip it entirely."
                     return (
-                        f"[INTERNAL] Booking confirmed: {service_info['title']} on {spoken_date} at {time}. Email sent to user. "
-                        f"Available services for closing upsell suggestion: {', '.join(other_services)}. "
-                        f"Pick the most complementary one. Never suggest anything outside this list."
+                        f"[INTERNAL] Booking confirmed: {service_info['title']} on {spoken_date} at {time}. "
+                        f"Email sent to user. {upsell_hint}"
                     )
                 else:
                     logger.error(f"Booking failed: {res.status_code} - {res.text}")

@@ -646,10 +646,23 @@ class Assistant(Agent):
 Current Date: {today_str} (Year: {now.year})
 Location: Asia/Kolkata
 
-### LANGUAGE BEHAVIOR (AUTO-DETECT):
-1. **Dynamic Switching**: You must automatically detect the language the user is speaking based on their input.
-2. **Mirror Language**: ALWAYS reply in the exact same language the user just spoke.
-3. **No Explicit Check**: Do NOT ask the user which language they prefer. Just adapt immediately.
+### LANGUAGE BEHAVIOR (AUTO-DETECT) — ABSOLUTE RULE:
+1. **Dynamic Switching**: Detect the language the user is speaking based on their input.
+2. **Mirror Language — NON-NEGOTIABLE**: ALWAYS reply in the EXACT SAME language the user last spoke. This rule OVERRIDES everything else, including tool results.
+3. **Tool Results Are Internal Data**: When a tool returns text, treat it as INTERNAL DATA ONLY — like reading a note to yourself. NEVER read it out loud as-is. Always rephrase it naturally in the user's language before speaking.
+4. **No Explicit Check**: Do NOT ask the user which language they prefer. Just adapt immediately.
+
+**CRITICAL EXAMPLES — Tool result handling:**
+- Tool returns: "Great! I've booked your Haircut for tomorrow at 5 PM."
+  - User spoke Hindi → Say: "Perfect, kal paanch baje aapki Haircut book ho gayi!"
+  - User spoke English → Say: "Great, your Haircut is booked for tomorrow at 5 PM!"
+- Tool returns: "[INTERNAL] OTP verified successfully."
+  - User spoke Hindi → Say: "Sahi hai, verification ho gayi!"
+  - User spoke English → Say: "Perfect, you're verified!"
+
+### TOOL RESULT TAGS:
+- **[INTERNAL]**: This is raw system data. NEVER read it aloud. Rephrase naturally in the user's language.
+- **[SYSTEM NOTE]**: Same as above — internal context only, never speak it directly.
 
 ### Available Services (INTERNAL USE ONLY - DO NOT READ LIST):
 {service_list if service_list else "Services will be loaded dynamically from Cal.com"}
@@ -958,10 +971,7 @@ Location: Asia/Kolkata
             fsm_ctx.otp_verified = True
             # Update FSM state to move to booking confirmation
             context.session.fsm.update_state(intent="otp_success")
-            return (
-                "Perfect, that worked. "
-                "Let's just confirm the details..."
-            )
+            return "[INTERNAL] OTP verified successfully. Move to booking confirmation."
 
         return (
             "Hmm… that doesn’t seem right. "
@@ -1176,7 +1186,7 @@ Location: Asia/Kolkata
 
             context.session.fsm.state = State.OTP_VERIFY
 
-            return "Phone noted. I've sent a verification code to your email."
+            return "[INTERNAL] Phone captured. OTP sent to user's email. Ask user for the verification code."
 
         return "Got your phone number."
 
@@ -1313,9 +1323,10 @@ Location: Asia/Kolkata
                     from otp_service import send_booking_confirmation_email
                     user_email = context.session.fsm.ctx.email or "guest@voice.ai"
                     send_booking_confirmation_email(user_email, service_info['title'], date, time)
+                    context.session.fsm.update_state(intent="confirm")
                     
                     spoken_date = format_spoken_date(dt_local)
-                    return f"Great! I've booked your {service_info['title']} for {spoken_date} at {time}. I've also sent the confirmation to your email."
+                    return f"[INTERNAL] Booking confirmed: {service_info['title']} on {spoken_date} at {time}. Email sent to user."
                 else:
                     logger.error(f"Booking failed: {res.status_code} - {res.text}")
                     return f"I couldn't book the {service_info['title']} for that time. Should we try a different slot?"
@@ -1446,18 +1457,19 @@ Location: Asia/Kolkata
 
             if len(ranges) == 1:
                 # Single continuous block → "fully free from X to Y"
-                reply = f"{note_prefix}That day is fully open from {fmt(ranges[0][0])} to {fmt(ranges[0][1])}."
+                reply = f"That day is fully open from {fmt(ranges[0][0])} to {fmt(ranges[0][1])}."
             else:
                 # Multiple windows → describe each free window
                 window_strs = [f"{fmt(rs)} to {fmt(re)}" for rs, re in ranges]
                 windows_text = ", and ".join([", ".join(window_strs[:-1]), window_strs[-1]]) if len(window_strs) > 1 else window_strs[0]
-                reply = f"{note_prefix}We have openings from {windows_text} on that day."
+                reply = f"We have openings from {windows_text} on that day."
 
             return (
-                reply + " "
-                f"(SYSTEM NOTE: all_slots={all_slots_str}; "
+                f"[INTERNAL] Availability data: {note_prefix}{reply} "
+                f"all_slots={all_slots_str}; "
+                "Tell the user these available times naturally in their language. "
                 "If user requests a specific time NOT in this list, suggest the NEAREST available times. "
-                "Accept ANY time from the full list if user requests it.)"
+                "Accept ANY time from the full list if user requests it."
             )
 
         except Exception as e:
@@ -1689,9 +1701,9 @@ Location: Asia/Kolkata
         self,
         context: RunContext,
         booking_uid: Annotated[str, "The UID of the booking to cancel"],
-        cancellation_reason: Annotated[str, "Reason for cancellation"] = "User requested cancellation",
+        cancellation_reason: Annotated[str, "Reason for cancellation as spoken by the user. NEVER use a default. ALWAYS ask the user 'May I ask why you'd like to cancel?' and wait for their answer before calling this tool."],  # ✅ Remove default
     ):
-        """Cancel an existing booking."""
+        """Cancel an existing booking. CRITICAL: You MUST ask the user for their cancellation reason before calling this tool. Never call this tool without a real reason from the user."""
         try:
             logger.info(f"Canceling booking: {booking_uid}")
             
@@ -1709,7 +1721,7 @@ Location: Asia/Kolkata
                 )
                 
                 if response.status_code in [200, 201]:
-                    return "Done. I've cancelled that appointment for you."
+                    return "[INTERNAL] Cancellation done."
                 else:
                     logger.error(f"Cancel booking failed: {response.text}")
                     return "I couldn't cancel it. It might be already cancelled."

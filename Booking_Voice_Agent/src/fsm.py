@@ -55,6 +55,7 @@ class ConversationContext:
         self.upsell_count: int = 0               # how many upsells have been suggested
         self.upsell_accepted: bool = False       # did user accept any upsell?
         self.upsell_combo_applied: bool = False  # was a combo event type found and applied?
+        self.upsell1_suggestion: str | None = None  # what was suggested in upsell #1
 
 class FSM:
     

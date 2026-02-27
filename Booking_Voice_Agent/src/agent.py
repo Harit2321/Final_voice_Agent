@@ -30,7 +30,7 @@ from livekit.agents import (
     room_io,
     AgentStateChangedEvent, UserStateChangedEvent, FunctionToolsExecutedEvent
 )
-from livekit.plugins import noise_cancellation, silero, openai,groq,resemble
+from livekit.plugins import noise_cancellation, silero, openai,groq,resemble,sarvam
 
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from otp_service import generate_otp, hash_otp, send_otp_email
@@ -649,8 +649,8 @@ class Assistant(Agent):
             logger.info("🤖 Assistant initialised with DEFAULT config (no project config received)")
 
         # ── Phase 2: Build dynamic identity from project config ────────────
-        agent_name    = self._agent_config.get("agentName")    or "Zara Patel"
-        business_name = self._agent_config.get("businessName") or "TSC Salon"
+        agent_name    = self._agent_config.get("agentName")    or "Shubh Patel"
+        business_name = self._agent_config.get("businessName") or "Luminox Salons"
         industry      = self._agent_config.get("industry")     or "salon"
 
         # Greeting used by my_agent().session.say() — stored separately so
@@ -695,6 +695,8 @@ You have a warm Indian English accent and a relaxed, friendly style. You speak t
 
 **English**: normal digits and time ("5:00 PM", "30 min").
 **Hindi/Hinglish**: casual everyday speech. Keep English words for Booking, Service, Time, Date, Phone, Available, Confirm. Never use formal Hindi (uplabdh, pushti, kripya).
+- CRITICAL FOR TTS: NEVER output Devanagari script (e.g. हिंदी, आपका). Always write Hindi in Roman letters only.
+- Wrong: "आपकी appointment confirm हो गई" → Right: "Aapki appointment confirm ho gayi!"
 
 **Hindi/Hinglish number rules — follow exactly:**
 - TIME → keep as digits, say AM/PM in English: "3 PM", "10 AM", "saade teen PM" is fine too
@@ -707,7 +709,7 @@ You have a warm Indian English accent and a relaxed, friendly style. You speak t
 
 ## TONE — SOUND LIKE A REAL HUMAN WHO LOVES THEIR JOB
 - Short, warm replies (1-3 sentences). Never more than 3 sentences at a time.
-- Use natural fillers and reactions: "Oh nice!", "Perfect!", "Great choice!", "Okay let me check...", "Hmm give me a second...", "Sounds good!", "Love that!", "Absolutely!"
+- Use natural fillers and reactions: "Perfect!", "Great choice!", "Okay let me check...", "Hmm give me a second...", "Sounds good!", "Love that!", "Absolutely!"
 - React to their service choice with genuine enthusiasm. A fade/taper? "Oh that's a great look." Kids haircut? "Aw, bringing in the little one!"
 - When checking availability say something like "Let me peek at the calendar real quick..." not "I am checking availability."
 - When booking is confirmed, sound genuinely happy for them: "You're all set! Super excited for you to come in."
@@ -732,7 +734,7 @@ Collect in this order. Skip what user already gave. Ask ONE thing at a time. Nev
    - NEVER ask for date/time until a specific service is confirmed.
    - After style picked → call `input_service` again with the specific name.
 
-2. **Date** → Ask casually: "Any day in mind, or want me to see what's open?" 
+2. **Date** → Ask casually: "Any day in mind, or want me to see what's open?"   
    - If user gives a date → call `get_availability` immediately.
    - No date → call `check_available_days`, present options warmly: "We've got good slots on Tuesday and Thursday — does either work for you?"
 
@@ -879,7 +881,6 @@ Stop suggesting the moment user sounds even slightly disinterested.
             "Hmm… that doesn’t seem right. "
             "Please say the six-digit code again, slowly."
         )
-
 
 
     @function_tool
@@ -1908,9 +1909,16 @@ async def my_agent(ctx: JobContext):
         ),
         llm=inference.LLM(model="openai/gpt-4.1-mini"),
         # llm=groq.LLM(model="openai/gpt-oss-20b"),
-        tts=inference.TTS(
-            model="cartesia/sonic-3",
-            voice=voice_id,  # Phase 4: dynamic per project
+        # tts=inference.TTS(
+        #     model="cartesia/sonic-3",
+        #     voice=voice_id,  # Phase 4: dynamic per project
+        # ),
+
+        tts=sarvam.TTS(
+            target_language_code="hi-IN",
+            model="bulbul:v3-beta",
+            speaker="shubh",
+            pace=1.1,
         ),
         # tts=resemble.TTS(
         #     voice_uuid="c99f388c",
@@ -1974,11 +1982,11 @@ async def my_agent(ctx: JobContext):
     if hasattr(_assistant, "_greeting") and _assistant._greeting:
         opening_line = _assistant._greeting
     elif agent_config:
-        _n = agent_config.get("agentName", "Zara Patel")
-        _b = agent_config.get("businessName", "TSC Salon")
+        _n = agent_config.get("agentName", "Shubh Patel")
+        _b = agent_config.get("businessName", "Luminox Salons")
         opening_line = f"Hello! I'm {_n} from {_b}. How can I help you today?"
     else:
-        opening_line = "Hello! I'm Zara Patel from TSC Salon. How can I help you today?"
+        opening_line = "Hello! I'm Shubh Patel from Luminox Salons. How can I help you today?"
 
     logger.info(f"🗣️  Opening greeting: {opening_line!r}")
     await session.say(opening_line, allow_interruptions=True)

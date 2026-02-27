@@ -69,13 +69,13 @@ class FSM:
         """
         from datetime import datetime
         now = datetime.now()
-        base = f"You are {agent_name if hasattr(self, '_agent_name') else 'Zara'}, a warm and friendly voice receptionist. You're chatting with a real person on a call and you genuinely want them to have a great experience. Today is {now.strftime('%A, %d %B %Y')}, timezone Asia/Kolkata. Stay in character — warm, natural, human. If asked anything off-topic, kindly redirect."        
+        base = f"[STATE CONTEXT ONLY — your personality, tone, language rules, and banned words from your main instructions still apply fully.] Today: {now.strftime('%A, %d %B %Y')}, timezone Asia/Kolkata."        
         if self.state == State.START:
             return base + " Greet the user. If they want to book, call `intent_book`. If they want to update/cancel, call `intent_manage`. Do not ask for details yet."
             
         # --- BOOKING ---
         if self.state == State.BOOKING_ASK_SERVICE:
-            return base + " Ask the user 'What service would you like to book?'. You can call `list_available_services` to see what is offered. If the user specifies a service, call `input_service`."
+            return base + " User wants to book. Ask what service they want in a natural, warm way. Tools available: list_available_services, input_service."
             
         # ── ADD HERE ──────────────────────────────────────────────
         if self.state == State.BOOKING_UPSELL:
@@ -88,22 +88,22 @@ class FSM:
             )
 
         if self.state == State.BOOKING_ASK_DATE:
-            msg = base + f" Service: {self.ctx.service}. Ask 'What day works for you?'. When user provides a date, call `input_date`. CRITICAL: Whenever a date is mentioned, you should plan to use `get_availability` immediately after."
+            msg = base + f" Service confirmed: {self.ctx.service}. Casually ask what day works for them. When they give a date call get_availability immediately. Tools: input_date, get_availability, check_available_days."
             return msg
             
         if self.state == State.BOOKING_ASK_TIME:
             date_str = self.ctx.date or "the date"
-            return base + f" Service: {self.ctx.service}, Date: {date_str}. Use `get_availability` to check slots if you haven't yet. presenting available slots (morning/afternoon/night). Ask 'What time works?'. When provided, call `input_time`."
+            return base + f" Service: {self.ctx.service}, Date: {date_str}. Present available slots naturally like a human — group them as morning/afternoon/evening. Let them pick. Tool: input_time."
             
         if self.state == State.BOOKING_ASK_PHONE:
-            return base + " Ask for PHONE NUMBER to finalize the booking. When provided, call `input_phone`."
+            return base + " Ask for their phone number warmly to lock in the booking. Wait for all 10 digits before calling input_phone."
             
         if self.state == State.BOOKING_CONFIRM:
-            return base + f" details: Service={self.ctx.service}, Date={self.ctx.date}, Time={self.ctx.time}, Phone={self.ctx.phone}. Confirm with the user: 'Just to confirm, I'm booking [Service] on [Date] at [Time]. Should I go ahead?'. If yes, call `create_booking` with the gathered details."
+            return base + f" Recap the booking naturally and warmly — don't read it like a form. Details: service={self.ctx.service}, date={self.ctx.date}, time={self.ctx.time}. Get their confirmation then call create_booking."
 
         # --- MANAGE (List) ---
         if self.state == State.MANAGE_ASK_PHONE:
-            return base + " Ask for PHONE NUMBER to find bookings. Call `input_phone` when provided."
+            return base + " Ask for their phone number to pull up their bookings. Tool: input_phone."
             
         if self.state == State.MANAGE_SELECT_BOOKING:
             return base + " Found multiple bookings. Ask user to select one (e.g. by time). Call `select_booking` with the UID or index."
@@ -120,10 +120,9 @@ class FSM:
                     "NEVER call `cancel_booking` without a real reason from the user."
                 )
             return base + (
-                " STEP 1: Ask 'Are you sure you want to cancel this appointment?' "
-                " STEP 2: If yes, ask 'May I ask why you'd like to cancel?' and WAIT for their answer. "
-                " STEP 3: Only AFTER getting the reason, call `cancel_booking` with the reason they gave. "
-                " NEVER skip asking for the reason. NEVER call `cancel_booking` with a default or assumed reason."
+                " Confirm the cancellation warmly — don't sound cold or transactional. "
+                " First confirm they want to cancel, then ask why (genuinely curious, not interrogating). "
+                " Only call cancel_booking after you have their reason."
             )
         # --- RESCHEDULE ---
         if self.state == State.RESCHEDULE_ASK_SERVICE:
@@ -141,16 +140,14 @@ class FSM:
         # OTP Verification
         if self.state == State.OTP_ASK_EMAIL:
             return base + (
-                "Ask for the user's email address. "
-                "Once provided, SPELL IT OUT character-by-character (e.g. 'a-b-c-@-g-m-a-i-l-.-c-o-m') to verify. "
-                "Ask 'Is that correct?'. Only after the user confirms 'yes', call `send_otp`."
+                "Ask for their email address naturally. Read it back character by character to confirm. "
+                " Only call send_otp after they confirm it's correct."
             )
 
         if self.state == State.OTP_SENT:
             return base + (
-                "Tell the user that an OTP was sent to their email. "
-                "Ask them to say the code. "
-                "If they ask to resend, call `resend_otp`."
+                " OTP has been sent. Let them know warmly and ask for the 6 digits whenever they're ready. "
+                " If they ask to resend call resend_otp."
             )
 
         if self.state == State.OTP_VERIFY:
@@ -168,19 +165,18 @@ class FSM:
         Returns a state-aware nudge when the user goes silent.
         """
         prompts = {
-        State.OTP_SENT: "Hey, did the code come through okay?",
-        State.OTP_ASK_EMAIL: "Still with me? Just need your email when you're ready.",
-        State.BOOKING_ASK_PHONE: "Just need your number and we're almost done!",
-        State.BOOKING_CONFIRM: "Should I go ahead and book that in for you?",
-        State.BOOKING_ASK_SERVICE: "What were you thinking of getting done today?",
-        State.BOOKING_ASK_DATE: "Any particular day work for you?",
-        State.BOOKING_ASK_TIME: "What time's good for you?",
-        State.CANCEL_CONFIRM: "Did you want to go ahead and cancel?",
-        State.MANAGE_ASK_PHONE: "Just need your number to find your booking.",
-        State.MANAGE_SELECT_BOOKING: "Which one did you want to pick?",
-        State.RESCHEDULE_ASK_DATE: "What new date works for you?",
-        State.RESCHEDULE_ASK_TIME: "What time were you thinking?",
-        State.RESCHEDULE_CONFIRM: "Should I go ahead and move that booking?",
+        State.OTP_ASK_EMAIL: "Hey, still there? Just your email and we're almost done!",
+        State.BOOKING_ASK_PHONE: "Almost there — just need your number to lock this in!",
+        State.BOOKING_CONFIRM: "You still want me to go ahead and book that?",
+        State.BOOKING_ASK_SERVICE: "So what are we getting done today?",
+        State.BOOKING_ASK_DATE: "Any day in mind, or should I check what's open?",
+        State.BOOKING_ASK_TIME: "What time works best for you?",
+        State.CANCEL_CONFIRM: "Did you still want to go ahead with the cancellation?",
+        State.MANAGE_ASK_PHONE: "Just drop me your number and I'll pull up your booking!",
+        State.MANAGE_SELECT_BOOKING: "Which booking did you want to go with?",
+        State.RESCHEDULE_ASK_DATE: "What date works for the new appointment?",
+        State.RESCHEDULE_ASK_TIME: "What time were you thinking for the new slot?",
+        State.RESCHEDULE_CONFIRM: "Should I go ahead and move that for you?",
     }
         return prompts.get(self.state, "Hello? Are you still there?")
 

@@ -452,7 +452,16 @@ export default function AgentPage({ params }: { params: Promise<{ projectId: str
                         </Link>
                     </nav>
 
-                    <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+                    <div
+                        onClick={() => router.push('/admin')}
+                        style={{
+                            padding: '20px 24px',
+                            borderTop: '1px solid var(--border)',
+                            cursor: 'pointer',
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(201,168,76,0.04)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div style={{
                                 width: '32px',

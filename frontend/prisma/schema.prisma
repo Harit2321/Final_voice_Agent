@@ -85,18 +85,39 @@ enum BookingStatus {
 
 // Conversation model for storing voice agent interactions
 model Conversation {
-  id         String   @id @default(uuid())
-  userId     String?
-  transcript Json // Store full conversation transcript
-  summary    String?
-  metadata   Json? // Additional metadata (language, duration, etc.)
-  createdAt  DateTime @default(now())
+  id               String   @id @default(uuid())
+  userId           String?
+
+  // Transcript
+  transcript       Json
+
+  // Structured call data — extracted directly from FSM
+  phone            String?
+  service          String?
+  bookedDate       String?
+  bookedTime       String?
+  callType         String?    // book / cancel / reschedule / unknown
+  upsellStatus     String?    // accepted / declined / not_offered
+  upsellSuggestion String?
+  amount           Float?
+  outcome          String?    // booked / cancelled / rescheduled / enquiry / dropped
+  direction        String?    // inbound / outbound
+  durationSeconds  Int?
+  callStartedAt    String?
+
+  // Legacy
+  summary          String?
+  metadata         Json?
+
+  createdAt        DateTime @default(now())
 
   // Relations
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createdAt])
+  @@index([outcome])
+  @@index([phone])
   @@map("conversations")
 }
 

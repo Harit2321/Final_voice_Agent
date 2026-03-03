@@ -45,9 +45,21 @@ export const updateUserSchema = z.object({
 
 // Conversation schema
 export const createConversationSchema = z.object({
-    transcript: z.record(z.string(), z.any()), // JSON object
-    summary: z.string().optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
+    transcript:       z.record(z.string(), z.any()),
+    summary:          z.string().optional(),
+    phone:            z.string().nullable().optional(),
+    service:          z.string().nullable().optional(),
+    bookedDate:       z.string().nullable().optional(),
+    bookedTime:       z.string().nullable().optional(),
+    callType:         z.string().optional(),
+    upsellStatus:     z.string().optional(),
+    upsellSuggestion: z.string().nullable().optional(),
+    amount:           z.number().nullable().optional(),
+    outcome:          z.string().optional(),
+    direction:        z.string().optional(),
+    durationSeconds:  z.number().optional(),
+    callStartedAt:    z.string().optional(),
+    metadata:         z.record(z.string(), z.any()).optional(),
 });
 
 // Project schema

@@ -1466,7 +1466,7 @@ Stop suggesting the moment user sounds even slightly disinterested.
         Finds the nearest upcoming days that have availability. 
         Use this when the user asks "When are you available?" or "Which days do you have connected?" without specifying a date.
         """
-        try:
+        try:      
             # Find the service
             service_info = find_service_by_name(service)
             if not service_info:
@@ -1498,7 +1498,6 @@ Stop suggesting the moment user sounds even slightly disinterested.
 
             json_data = res.json()
             slots_data = json_data.get("slots", json_data)
-            
             available_days = []
             
             # slots_data is typically { "2023-12-22": [...], "2023-12-23": [...] }
@@ -1719,29 +1718,28 @@ async def log_conversation(
     project_id: str | None,
     agent_config: dict | None,
     call_start: float,
+    call_start_dt: str = "",
 ) -> None:
     """
-    Phase 5: POST call transcript + metadata to the Next.js frontend after a
-    session ends.  Called once from a participant_disconnected handler.
-
-    Payload shape (matches createConversationSchema on the frontend):
-      transcript : { messages: [{role, content, timestamp}] }
-      summary    : one-line string
-      metadata   : { projectId, agentName, businessName, durationSeconds, outcome }
+    Phase 5: Extract all structured call data from FSM + session,
+    then POST to Next.js backend for storage.
     """
     backend_url = os.getenv("BACKEND_URL", "http://localhost:3000").rstrip("/")
     secret = os.getenv("VOICE_AGENT_SECRET", "")
 
     duration_seconds = int(time.monotonic() - call_start)
 
-    # ── Build transcript from session chat context ─────────────────────────
+    # ── 1. Extract transcript (user + assistant only, strip [INTERNAL]) ────
     messages = []
     try:
         for msg in session.chat_ctx.messages:
             role = getattr(msg, "role", "unknown")
-            # role is a ChatRole enum in livekit-agents; convert to string
             role_str = role.value if hasattr(role, "value") else str(role)
-            # content may be a string or a list of content parts
+
+            # Only keep actual spoken dialogue
+            if role_str not in ("user", "assistant"):
+                continue
+
             raw_content = getattr(msg, "content", "")
             if isinstance(raw_content, list):
                 content_str = " ".join(
@@ -1750,43 +1748,143 @@ async def log_conversation(
                 )
             else:
                 content_str = str(raw_content)
-            messages.append({"role": role_str, "content": content_str})
+
+            # Strip internal instructions from assistant messages
+            content_str = content_str.strip()
+            if content_str.startswith("[INTERNAL]") or content_str.startswith("[SYSTEM NOTE]"):
+                continue
+            # Also strip trailing [INTERNAL] notes mid-content
+            if "[INTERNAL]" in content_str:
+                content_str = content_str[:content_str.index("[INTERNAL]")].strip()
+
+            if content_str:
+                messages.append({"role": role_str, "content": content_str})
     except Exception as e:
         logger.warning(f"log_conversation: could not extract chat messages — {e}")
 
-    # ── Build outcome summary from FSM state ──────────────────────────────
-    outcome = "completed"
+    # ── 2. Extract all structured fields from FSM context ─────────────────
+    fsm = None
+    fsm_ctx = None
     try:
         fsm = getattr(session, "fsm", None)
         if fsm:
-            fsm_state = str(getattr(fsm, "state", ""))
-            fsm_ctx   = getattr(fsm, "ctx", None)
-            booked_service = getattr(fsm_ctx, "service", None) if fsm_ctx else None
-            outcome = (
-                f"booked:{booked_service}" if booked_service
-                else f"state:{fsm_state}"
-            )
+            fsm_ctx = getattr(fsm, "ctx", None)
     except Exception as e:
-        logger.warning(f"log_conversation: could not read FSM state — {e}")
+        logger.warning(f"log_conversation: could not read FSM — {e}")
 
-    summary = (
-        f"Call with {(agent_config or {}).get('agentName', 'agent')} "
-        f"at {(agent_config or {}).get('businessName', 'business')} — "
-        f"{duration_seconds}s — {outcome}"
-    )
+    # Read from live ctx first, fall back to _last_* saved before reset
+    def fsm_get(attr, fallback_attr=None, default=None):
+        # Try live ctx
+        val = getattr(fsm_ctx, attr, None) if fsm_ctx else None
+        if val is not None:
+            return val
+        # Try saved _last_* on fsm object itself
+        if fsm and fallback_attr:
+            val = getattr(fsm, fallback_attr, None)
+            if val is not None:
+                return val
+        return default
 
+    phone           = fsm_get("phone",           "_last_phone")
+    service         = fsm_get("service",          "_last_service")
+    booked_date     = fsm_get("date",             "_last_date")
+    booked_time     = fsm_get("time",             "_last_time")
+    intent          = fsm_get("intent",           "_last_intent")
+    call_type       = intent or "unknown"
+    upsell_accepted = fsm_get("upsell_accepted",  "_last_upsell_accepted", False)
+    upsell_suggestion = fsm_get("upsell1_suggestion", "_last_upsell_suggestion")
+    upsell_combo_applied = getattr(fsm_ctx, "upsell_combo_applied", False) if fsm_ctx else False
+
+    if upsell_suggestion is None:
+        upsell_status = "not_offered"
+    elif upsell_accepted:
+        upsell_status = "accepted"
+    else:
+        upsell_status = "declined"
+
+    # Amount — look up price from cached event types by matching service name
+    amount = None
+    try:
+        if service:
+            service_info = find_service_by_name(service)
+            if service_info:
+                # Price is in description field as "Price: $X" or similar
+                desc = service_info.get("description", "")
+                if desc and "price" in desc.lower():
+                    import re as _re
+                    price_match = _re.search(r"[\$₹]?\s*(\d+(?:\.\d+)?)", desc, _re.IGNORECASE)
+                    if price_match:
+                        amount = float(price_match.group(1))
+    except Exception as e:
+        logger.warning(f"log_conversation: could not extract amount — {e}")
+
+    # Outcome for stats (booked / cancelled / rescheduled / dropped)
+    if call_type == "book" and service and booked_date and booked_time:
+        outcome = "booked"
+    elif call_type == "cancel":
+        outcome = "cancelled"
+    elif call_type in ("reschedule", "update"):
+        outcome = "rescheduled"
+    elif call_type == "cancel_all":
+        outcome = "cancelled"
+    elif messages:
+        outcome = "enquiry"
+    else:
+        outcome = "dropped"
+
+    # Direction is always inbound for now
+    direction = "inbound"
+
+    # ── 3. Build payload ───────────────────────────────────────────────────
     payload = {
+        # Transcript
         "transcript": {"messages": messages},
-        "summary": summary,
+
+        # Structured call data
+        "phone": phone,
+        "service": service,
+        "bookedDate": booked_date,
+        "bookedTime": booked_time,
+        "callType": call_type,
+        "upsellStatus": upsell_status,
+        "upsellSuggestion": upsell_suggestion,
+        "amount": amount,
+        "outcome": outcome,
+        "direction": direction,
+        "durationSeconds": duration_seconds,
+        "callStartedAt": call_start_dt,
+
+        # Legacy summary field (keep for backward compat)
+        "summary": (
+            f"{call_type.upper()} call — {service or 'no service'} — "
+            f"{outcome} — {duration_seconds}s"
+        ),
+
+        # Metadata
         "metadata": {
-            "projectId":    project_id,
-            "agentName":    (agent_config or {}).get("agentName"),
-            "businessName": (agent_config or {}).get("businessName"),
+            "projectId":      project_id,
+            "agentName":      (agent_config or {}).get("agentName"),
+            "businessName":   (agent_config or {}).get("businessName"),
             "durationSeconds": duration_seconds,
-            "outcome": outcome,
+            "outcome":        outcome,
+            "callType":       call_type,
+            "upsellStatus":   upsell_status,
+            "phone":          phone,
+            "service":        service,
+            "bookedDate":     booked_date,
+            "bookedTime":     booked_time,
+            "amount":         amount,
+            "direction":      direction,
+            "callStartedAt":  call_start_dt,
         },
     }
 
+    logger.info(
+        f"📋 Call data extracted — phone={phone}, service={service!r}, "
+        f"outcome={outcome}, upsell={upsell_status}, duration={duration_seconds}s"
+    )
+
+    # ── 4. POST to backend ─────────────────────────────────────────────────
     url = f"{backend_url}/api/conversations"
     headers = {
         "Content-Type": "application/json",
@@ -1800,7 +1898,7 @@ async def log_conversation(
         if res.status_code in (200, 201):
             logger.info(
                 f"✅ Phase 5: Conversation logged — duration={duration_seconds}s, "
-                f"outcome={outcome!r}"
+                f"outcome={outcome!r}, phone={phone!r}"
             )
         else:
             logger.warning(
@@ -1854,7 +1952,7 @@ async def my_agent(ctx: JobContext):
                         break
         except Exception as meta_err:
             logger.warning(f"Could not read participant metadata: {meta_err}")
-
+ 
     if not project_id:
         logger.warning(
             "⚠️  No projectId could be determined. "
@@ -1945,6 +2043,9 @@ async def my_agent(ctx: JobContext):
 
     _assistant=Assistant(agent_config=agent_config)
 
+    call_start = time.monotonic()
+    call_start_dt = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+
     # Agent config flows: my_agent → Assistant.__init__ → dynamic identity + greeting
     await session.start(
         agent=_assistant,
@@ -1959,9 +2060,6 @@ async def my_agent(ctx: JobContext):
     )
 
 
-    # ── Phase 5: Track call start time ────────────────────────────────────
-    call_start = time.monotonic()
-
     # ── Phase 5: Register disconnect handler to log the conversation ───────
     # We capture the variables we need via closure.
     @ctx.room.on("participant_disconnected")
@@ -1973,7 +2071,7 @@ async def my_agent(ctx: JobContext):
                 "scheduling conversation log."
             )
             asyncio.ensure_future(
-                log_conversation(session, project_id, agent_config, call_start)
+                log_conversation(session, project_id, agent_config, call_start,call_start_dt)
             )
 
     # ── Phase 2: Dynamic greeting from project config ─────────────────────

@@ -255,9 +255,16 @@ class FSM:
             self.state = State.BOOKING_CONFIRM
             
         elif self.state == State.BOOKING_CONFIRM and intent == "confirm":
-            # Action should be taken by agent, then reset
-            self.state = State.START 
-            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context
+        # Save key fields before reset so log_conversation can read them
+            self._last_service = self.ctx.service
+            self._last_phone = self.ctx.phone
+            self._last_date = self.ctx.date
+            self._last_time = self.ctx.time
+            self._last_intent = self.ctx.intent
+            self._last_upsell_accepted = self.ctx.upsell_accepted
+            self._last_upsell_suggestion = self.ctx.upsell1_suggestion
+            self.state = State.START
+            self.ctx = ConversationContext()
             
         # MANAGE FLOW
         elif self.state == State.MANAGE_ASK_PHONE:
@@ -289,8 +296,10 @@ class FSM:
 
         # SPECIFIC ACTION FLOWS
         elif self.state == State.CANCEL_CONFIRM and intent == "confirm":
+            self._last_phone = self.ctx.phone
+            self._last_intent = self.ctx.intent
             self.state = State.START
-            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context
+            self.ctx = ConversationContext()
         
         elif self.state == State.RESCHEDULE_ASK_SERVICE and "service" in data:
             self.ctx.service = data["service"]
@@ -308,8 +317,13 @@ class FSM:
             self.state = State.RESCHEDULE_CONFIRM
             
         elif self.state == State.RESCHEDULE_CONFIRM and intent == "confirm":
+            self._last_service = self.ctx.service
+            self._last_phone = self.ctx.phone
+            self._last_date = self.ctx.date
+            self._last_time = self.ctx.time
+            self._last_intent = self.ctx.intent
             self.state = State.START
-            self.ctx = ConversationContext()   # ✅ ADD THIS — reset dirty context  
+            self.ctx = ConversationContext()  
         
         # Log state transition
         if old_state != self.state:

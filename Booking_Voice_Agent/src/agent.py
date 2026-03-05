@@ -1852,6 +1852,11 @@ async def log_conversation(
     call_type       = intent or "unknown"
     upsell_accepted = fsm_get("upsell_accepted",  "_last_upsell_accepted", False)
     upsell_suggestion = fsm_get("upsell1_suggestion", "_last_upsell_suggestion")
+    # Also check direct attribute on fsm object (set in input_service tool)
+    if upsell_suggestion is None and fsm:
+        upsell_suggestion = getattr(fsm, "_last_upsell_suggestion", None)
+    if upsell_suggestion is None and fsm_ctx:
+        upsell_suggestion = getattr(fsm_ctx, "upsell1_suggestion", None)
     upsell_combo_applied = getattr(fsm_ctx, "upsell_combo_applied", False) if fsm_ctx else False
 
     if upsell_suggestion is None:
@@ -1870,7 +1875,7 @@ async def log_conversation(
                 # Price is in description field as "Price: $X" or similar
                 desc = service_info.get("description", "")
                 if desc:
-                    price_match = _re.search(r"[\$₹]\s*(\d+(?:\.\d+)?)", desc, _re.IGNORECASE)
+                    price_match = re.search(r"[₹$]\s*(\d+(?:\.\d+)?)", desc, re.IGNORECASE)
                     if price_match:
                         amount = float(price_match.group(1))
     except Exception as e:

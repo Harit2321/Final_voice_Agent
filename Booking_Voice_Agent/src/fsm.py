@@ -1,14 +1,15 @@
 from enum import Enum, auto
 from typing import Optional, Dict, Any
 from datetime import datetime
+import copy
+
 
 class State(Enum):
     START = auto()
 
 
     # OTP Verification
-    OTP_ASK_EMAIL = auto()
-    OTP_SENT = auto()
+   
     OTP_VERIFY = auto()
     OTP_VERIFIED = auto()
     
@@ -56,12 +57,15 @@ class ConversationContext:
         self.upsell_accepted: bool = False       # did user accept any upsell?
         self.upsell_combo_applied: bool = False  # was a combo event type found and applied?
         self.upsell1_suggestion: str | None = None  # what was suggested in upsell #1
+        self.has_upsell_pending: bool = False  # ✅ routes FSM into BOOKING_UPSELL state
 
 class FSM:
     
     def __init__(self):
         self.state = State.START
         self.ctx = ConversationContext()
+        self.completed_ctx = None  # ✅ FIX: snapshot saved after booking confirm
+
     
     def get_system_prompt(self) -> str:
         """
@@ -138,17 +142,8 @@ class FSM:
             return base + f" Confirm reschedule: {self.ctx.service} on {self.ctx.date} at {self.ctx.time}. Call `confirm_action`."
 
         # OTP Verification
-        if self.state == State.OTP_ASK_EMAIL:
-            return base + (
-                "Ask for their email address naturally. Read it back character by character to confirm. "
-                " Only call send_otp after they confirm it's correct."
-            )
 
-        if self.state == State.OTP_SENT:
-            return base + (
-                " OTP has been sent. Let them know warmly and ask for the 6 digits whenever they're ready. "
-                " If they ask to resend call resend_otp."
-            )
+
 
         if self.state == State.OTP_VERIFY:
             return base + (
@@ -165,7 +160,6 @@ class FSM:
         Returns a state-aware nudge when the user goes silent.
         """
         prompts = {
-        State.OTP_ASK_EMAIL: "Hey, still there? Just your email and we're almost done!",
         State.BOOKING_ASK_PHONE: "Almost there — just need your number to lock this in!",
         State.BOOKING_CONFIRM: "You still want me to go ahead and book that?",
         State.BOOKING_ASK_SERVICE: "So what are we getting done today?",
@@ -211,14 +205,17 @@ class FSM:
         # BOOKING FLOW
         elif self.state == State.BOOKING_ASK_SERVICE and "service" in data:
             self.ctx.service = data["service"]
-            self.state = State.BOOKING_ASK_DATE
-            # Optimization: if date/time provided upfront
-            if "date" in data:
-                 self.ctx.date = data["date"]
-                 self.state = State.BOOKING_ASK_TIME
-                 if "time" in data:
-                     self.ctx.time = data["time"]
-                     self.state = State.BOOKING_ASK_PHONE
+            if data.get("has_upsell_pending"):
+                self.ctx.has_upsell_pending = True
+                self.state = State.BOOKING_UPSELL
+            else:
+                self.state = State.BOOKING_ASK_DATE
+                if "date" in data:
+                    self.ctx.date = data["date"]
+                    self.state = State.BOOKING_ASK_TIME
+                    if "time" in data:
+                        self.ctx.time = data["time"]
+                        self.state = State.BOOKING_ASK_PHONE
 
         elif self.state == State.BOOKING_ASK_DATE and "date" in data:
             self.ctx.date = data["date"]
@@ -236,31 +233,35 @@ class FSM:
             
         elif self.state == State.BOOKING_ASK_PHONE and "phone" in data:
             self.ctx.phone = data["phone"]
-            self.state = State.OTP_ASK_EMAIL
+            self.state =  State.OTP_VERIFY
 
         # ── ADD HERE ──────────────────────────────────────────────
         elif self.state == State.BOOKING_UPSELL:
             if intent == "upsell_accepted":
                 self.ctx.upsell_accepted = True
+                self.ctx.has_upsell_pending = False  # ✅ clear flag
                 self.state = State.BOOKING_ASK_DATE
             elif intent == "upsell_declined":
+                self.ctx.has_upsell_pending = False  # ✅ clear flag
                 self.state = State.BOOKING_ASK_DATE
 
-        # OTP FLOW
-        elif self.state == State.OTP_ASK_EMAIL and "email" in data:
-            self.ctx.email = data["email"]
-            self.state = State.OTP_VERIFY
             
         elif self.state == State.OTP_VERIFY and intent == "otp_success":
             self.state = State.BOOKING_CONFIRM
             
-        elif self.state == State.BOOKING_CONFIRM and intent == "confirm":
-        # Save key fields before reset so log_conversation can read them
+        elif intent == "confirm" and self.state in (
+            State.BOOKING_CONFIRM, State.BOOKING_ASK_DATE, State.BOOKING_ASK_TIME,
+            State.BOOKING_ASK_PHONE, State.OTP_VERIFY
+        ):
+            # ✅ Snapshot regardless of exact state — LLM sometimes skips intermediate steps
+            import copy
+            self.completed_ctx = copy.copy(self.ctx)
+            # Save key fields before reset so log_conversation can read them
             self._last_service = self.ctx.service
             self._last_phone = self.ctx.phone
             self._last_date = self.ctx.date
             self._last_time = self.ctx.time
-            self._last_intent = self.ctx.intent
+            self._last_intent = self.ctx.intent or "book"
             self._last_upsell_accepted = self.ctx.upsell_accepted
             self._last_upsell_suggestion = self.ctx.upsell1_suggestion
             self.state = State.START
@@ -296,6 +297,8 @@ class FSM:
 
         # SPECIFIC ACTION FLOWS
         elif self.state == State.CANCEL_CONFIRM and intent == "confirm":
+            import copy
+            self.completed_ctx = copy.copy(self.ctx)
             self._last_phone = self.ctx.phone
             self._last_intent = self.ctx.intent
             self.state = State.START
@@ -317,6 +320,8 @@ class FSM:
             self.state = State.RESCHEDULE_CONFIRM
             
         elif self.state == State.RESCHEDULE_CONFIRM and intent == "confirm":
+            import copy
+            self.completed_ctx = copy.copy(self.ctx)
             self._last_service = self.ctx.service
             self._last_phone = self.ctx.phone
             self._last_date = self.ctx.date

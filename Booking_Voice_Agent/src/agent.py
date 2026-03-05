@@ -202,11 +202,10 @@ async def fetch_event_types(force_refresh=False):
         return EVENT_TYPES_CACHE["data"]
 
 
-def get_all_services():
+def get_all_services(active_services: list = None):
     """Get all available services from cached event types."""
-    event_types = EVENT_TYPES_CACHE["data"]
+    event_types = active_services if active_services is not None else EVENT_TYPES_CACHE["data"]
     services = []
-    
     for et in event_types:
         service_info = {
             "id": et.get("id"),
@@ -218,13 +217,13 @@ def get_all_services():
         services.append(service_info)
     
     return services
-def group_services_by_category() -> dict[str, list[dict]]:
+def group_services_by_category(active_services: list = None) -> dict[str, list[dict]]:
     """
     Groups services by their category prefix.
     Cal.com titles follow the pattern "Category - Style".
     Returns: {"Hair": [service1, service2], "Beard": [...], ...}
     """
-    services = get_all_services()
+    services = get_all_services(active_services)
     categories: dict[str, list[dict]] = {}
     
     for svc in services:
@@ -242,12 +241,12 @@ def group_services_by_category() -> dict[str, list[dict]]:
     return categories
 
 
-def find_category_by_name(category_name: str) -> list[dict] | None:
+def find_category_by_name(category_name: str, active_services: list = None) -> list[dict] | None:
     """
     Given a broad category like 'hair' or 'beard', returns all matching sub-services.
     Returns None if only one service matches (no sub-selection needed).
     """
-    categories = group_services_by_category()
+    categories = group_services_by_category(active_services)
     name_lower = category_name.lower().strip()
     
     for cat_key, services in categories.items():
@@ -257,9 +256,9 @@ def find_category_by_name(category_name: str) -> list[dict] | None:
     return None
 
 
-def find_service_by_name(service_name: str):
+def find_service_by_name(service_name: str, active_services: list = None):
     """Find a service by matching the name (case-insensitive, partial match)."""
-    services = get_all_services()
+    services = get_all_services(active_services)
     service_lower = service_name.lower().strip()
     
     # Try exact match first
@@ -276,9 +275,9 @@ def find_service_by_name(service_name: str):
     
     return None
 
-def find_combo_service(primary_service: str, addon_service: str):
+def find_combo_service(primary_service: str, addon_service: str, active_services: list = None):
     """Look for a combo event type covering both services."""
-    services = get_all_services()
+    services = get_all_services(active_services)
     primary_lower = primary_service.lower().strip()
     addon_lower = addon_service.lower().strip()
 
@@ -303,14 +302,14 @@ def find_combo_service(primary_service: str, addon_service: str):
 
     return best
 
-def find_upsell_target(booked_service: str, exclude: str | None = None) -> str | None:
+def find_upsell_target(booked_service: str, exclude: str | None = None, active_services: list = None) -> str | None:
     """
     Dynamically find the best upsell target based on what was booked.
     - Individual service → find a combo that contains its keyword
     - Combo → find a different combo with least keyword overlap
     exclude: title already suggested in upsell #1, to avoid repeating it
     """
-    services = get_all_services()
+    services = get_all_services(active_services)
     booked_lower = booked_service.lower().strip()
     is_combo = booked_lower.startswith("combo")
 
@@ -354,28 +353,21 @@ def find_upsell_target(booked_service: str, exclude: str | None = None) -> str |
         return best["title"] if best else None
 
 
-def filter_services_by_project(agent_config: dict | None) -> None:
+def filter_services_by_project(agent_config: dict | None) -> list:
     """
-    Phase 3: Cross-reference the Cal.com event-type cache with the services
-    list stored in the project config (Prisma DB).  Only keeps cached entries
-    whose title fuzzy-matches a service that the business owner configured for
-    this project.  If no services are configured, the full Cal.com list
-    remains unchanged (safe default).
-
-    This function mutates EVENT_TYPES_CACHE in-place — it does NOT evict the
-    Cal.com IDs/slugs that create_booking needs, it just narrows the list.
+    Returns a filtered copy of the master cache for this session.
+    NEVER mutates EVENT_TYPES_CACHE — concurrent sessions are safe.
     """
-    global EVENT_TYPES_CACHE
+    cached = list(EVENT_TYPES_CACHE["data"])  # shallow copy, never touch original
 
     if not agent_config:
-        return  # Nothing to filter, keep all Cal.com services
+        return cached
 
     project_services: list = agent_config.get("services", []) or []
     if not project_services:
-        logger.info("📂 Phase 3: No services configured in project — keeping all Cal.com services")
-        return
+        logger.info("📂 Phase 3: No services configured — using all Cal.com services")
+        return cached
 
-    # Build a lower-cased set of project service names for matching
     project_names: set[str] = set()
     for svc in project_services:
         name = svc.get("name", "") if isinstance(svc, dict) else str(svc)
@@ -383,41 +375,27 @@ def filter_services_by_project(agent_config: dict | None) -> None:
             project_names.add(name.strip().lower())
 
     if not project_names:
-        logger.info("📂 Phase 3: project services list is empty after parsing — keeping all Cal.com services")
-        return
+        return cached
 
-    logger.info(f"📂 Phase 3: Filtering Cal.com services to project set: {project_names}")
+    logger.info(f"📂 Phase 3: Filtering to project services: {project_names}")
 
-    cached = EVENT_TYPES_CACHE["data"]
-    filtered = []
-    for entry in cached:
-        title_lower = (entry.get("title") or "").lower()
-        slug_lower  = (entry.get("slug")  or "").lower()
-        # Accept if any project service name is contained in (or contains) the Cal.com title/slug
-        matched = any(
-            p in title_lower or title_lower in p or
-            p in slug_lower  or slug_lower  in p
+    filtered = [
+        entry for entry in cached
+        if any(
+            p in (entry.get("title") or "").lower() or
+            (entry.get("title") or "").lower() in p or
+            p in (entry.get("slug") or "").lower() or
+            (entry.get("slug") or "").lower() in p
             for p in project_names
         )
-        if matched:
-            filtered.append(entry)
+    ]
 
     if filtered:
-        EVENT_TYPES_CACHE["data"] = filtered
-        logger.info(
-            f"✅ Phase 3: Service cache narrowed to "
-            f"{len(filtered)}/{len(cached)} entries: "
-            f"{[e['title'] for e in filtered]}"
-        )
-    else:
-        # Matching produced 0 results — likely a name mismatch between DB and Cal.com.
-        # Keep all services rather than leaving the agent with nothing to book.
-        logger.warning(
-            f"⚠️  Phase 3: Service name filter matched 0 out of {len(cached)} Cal.com entries "
-            f"for project names {project_names}. "
-            "Keeping full Cal.com list to avoid a broken session."
-        )
+        logger.info(f"✅ Phase 3: Narrowed to {len(filtered)}/{len(cached)} services: {[e['title'] for e in filtered]}")
+        return filtered
 
+    logger.warning(f"⚠️ Phase 3: Filter matched 0 services for {project_names} — using full list")
+    return cached
 
 def normalize_phone(phone: str) -> str:
     # Strip everything non-digit (handles hyphens, commas, spaces from STT)
@@ -580,6 +558,14 @@ class SilenceMonitor:
         if self._timer_task and not self._timer_task.done():
             self._timer_task.cancel()
             logger.debug("Stopped silence monitoring")
+
+    def cancel(self):
+        """Permanently shut down the monitor on disconnect."""
+        self._waiting_for_user = False
+        self._prompt_count = self._max_prompts  # prevent any future prompts
+        if self._timer_task and not self._timer_task.done():
+            self._timer_task.cancel()
+        logger.debug("SilenceMonitor permanently cancelled")
     
     async def _silence_timer(self):
         """Timer that triggers prompt after timeout."""
@@ -667,7 +653,7 @@ class Assistant(Agent):
         )
 
         # ── Build dynamic instructions based on available services ──────────
-        services = get_all_services()
+        services = get_all_services(EVENT_TYPES_CACHE["data"])
         service_list = "\n".join([f"- **{s['title']}**: {s['duration']} min"
     + (f" | {s['description']}" if s.get('description') else "")
     for s in services])
@@ -913,14 +899,18 @@ Stop suggesting the moment user sounds even slightly disinterested.
         If user gives a specific style, confirms and stores it.
         """
     # STEP A: Try to find an exact/specific service match first
-        service_info = find_service_by_name(service)
-    
+        _svc_list = context.session.active_services
+        service_info = find_service_by_name(service, _svc_list)
+
         if service_info:
             # Exact match found — store it and proceed
-            context.session.fsm.update_state(data={"service": service_info["title"]})
-            upsell_target = find_upsell_target(service_info["title"])
+            upsell_target = find_upsell_target(service_info["title"], active_services=_svc_list)
             if upsell_target:
                 context.session.fsm.ctx.upsell1_suggestion = upsell_target
+            context.session.fsm.update_state(data={
+                "service": service_info["title"],
+                "has_upsell_pending": bool(upsell_target),
+            })
             upsell_hint = (
                 f"Suggest upgrading to '{upsell_target}' — it complements what they chose. "
                 f"Call accept_upsell if yes, decline_upsell if no."
@@ -929,10 +919,10 @@ Stop suggesting the moment user sounds even slightly disinterested.
                 f"[INTERNAL] Service confirmed: {service_info['title']} ({service_info['duration']} min). "
                 f"{upsell_hint}"
             )
-    
+
     # STEP B: No exact match — try category-level match
-        category_services = find_category_by_name(service)
-    
+        category_services = find_category_by_name(service, _svc_list)
+
         if category_services and len(category_services) > 1:
             # Multiple styles exist — ask the user to pick
             style_options = [
@@ -945,14 +935,17 @@ Stop suggesting the moment user sounds even slightly disinterested.
                 f"Ask user to choose one: {options_str}. "
                 f"Do NOT proceed to date/time yet. Wait for their style choice."
             )
-    
+
         elif category_services and len(category_services) == 1:
             # Only one service in this category — auto-select it
             svc = category_services[0]
-            context.session.fsm.update_state(data={"service": svc["title"]})
-            upsell_target = find_upsell_target(svc["title"])
+            upsell_target = find_upsell_target(svc["title"], active_services=_svc_list)
             if upsell_target:
                 context.session.fsm.ctx.upsell1_suggestion = upsell_target
+            context.session.fsm.update_state(data={
+                "service": svc["title"],
+                "has_upsell_pending": bool(upsell_target),
+            })
             upsell_hint = (
                 f"Suggest upgrading to '{upsell_target}' — it complements what they chose. "
                 f"Call accept_upsell if yes, decline_upsell if no."
@@ -961,10 +954,10 @@ Stop suggesting the moment user sounds even slightly disinterested.
                 f"[INTERNAL] Only one option in '{service}' category: {svc['title']} ({svc['duration']} min). "
                 f"Auto-selected. {upsell_hint}"
             )
-    
+
         # STEP C: Nothing matched at all
-        services = get_all_services()
-        categories = group_services_by_category()
+        services = get_all_services(_svc_list)
+        categories = group_services_by_category(_svc_list)
         available_categories = list(categories.keys())
         return (
             f"I couldn't find '{service}'. "
@@ -981,7 +974,8 @@ Stop suggesting the moment user sounds even slightly disinterested.
     ):
         """Call this when user AGREES to an upsell suggestion."""
         fsm_ctx = context.session.fsm.ctx
-        combo = find_combo_service(primary_service, addon_service)
+        _svc_list = context.session.active_services
+        combo = find_combo_service(primary_service, addon_service, _svc_list)
 
         if combo:
             context.session.fsm.update_state(intent="upsell_accepted", data={"service": combo["title"]})
@@ -990,8 +984,8 @@ Stop suggesting the moment user sounds even slightly disinterested.
                 f"({combo['duration']} min). Tell user you've added {addon_service} and continue."
             )
 
-        primary_info = find_service_by_name(primary_service)
-        addon_info = find_service_by_name(addon_service)
+        primary_info = find_service_by_name(primary_service, _svc_list)
+        addon_info = find_service_by_name(addon_service, _svc_list)
 
         if primary_info and addon_info:
             current_addons = getattr(fsm_ctx, "pending_addons", [])
@@ -1153,7 +1147,6 @@ Stop suggesting the moment user sounds even slightly disinterested.
             send_otp_email(email, otp)
             logger.info(f"Auto-sent OTP to {email} (from phone {normalized})")
 
-            context.session.fsm.state = State.OTP_VERIFY
 
             return "[INTERNAL] Phone captured. OTP sent to user's email. Ask user for the verification code."
 
@@ -1185,7 +1178,7 @@ Stop suggesting the moment user sounds even slightly disinterested.
     ):
         """List all available services from Cal.com, grouped by category."""
         await fetch_event_types(force_refresh=True)
-        services = get_all_services()
+        services = get_all_services(context.session.active_services)
 
         if not services:
             return "I couldn't fetch the available services right now."
@@ -1236,10 +1229,10 @@ Stop suggesting the moment user sounds even slightly disinterested.
         """Create a new booking for the specified service."""
         try:
             # Find the service
-            service_info = find_service_by_name(service)
-            
+            service_info = find_service_by_name(service, context.session.active_services)
+
             if not service_info:
-                services = get_all_services()
+                services = get_all_services(context.session.active_services)
                 available = ", ".join([s['title'] for s in services])
                 return f"I couldn't find a service matching '{service}'. Available services: {available}"
 
@@ -1292,11 +1285,23 @@ Stop suggesting the moment user sounds even slightly disinterested.
                     from otp_service import send_booking_confirmation_email
                     user_email = context.session.fsm.ctx.email or "guest@voice.ai"
                     send_booking_confirmation_email(user_email, service_info['title'], date, time)
+                    # ✅ Ensure FSM ctx has all booking fields before snapshot
+                    fsm_ctx = context.session.fsm.ctx
+                    if not getattr(fsm_ctx, "service", None):
+                        fsm_ctx.service = service_info["title"]
+                    if not getattr(fsm_ctx, "date", None):
+                        fsm_ctx.date = date
+                    if not getattr(fsm_ctx, "time", None):
+                        fsm_ctx.time = time
+                    if not getattr(fsm_ctx, "phone", None):
+                        fsm_ctx.phone = normalize_phone(guest_phone)
+                    if not getattr(fsm_ctx, "intent", None):
+                        fsm_ctx.intent = "book"
                     context.session.fsm.update_state(intent="confirm")
                     
                     spoken_date = format_spoken_date(dt_local)
                     upsell1_already_suggested = getattr(context.session.fsm.ctx, "upsell1_suggestion", None)
-                    upsell_target = find_upsell_target(service_info["title"], exclude=upsell1_already_suggested)
+                    upsell_target = find_upsell_target(service_info["title"], exclude=upsell1_already_suggested, active_services=context.session.active_services)
                     upsell_hint = (
                         f"Suggest '{upsell_target}' as a next-time idea — genuinely different from what they just booked."
                     ) if upsell_target else "No closing upsell needed — skip it entirely."
@@ -1323,13 +1328,13 @@ Stop suggesting the moment user sounds even slightly disinterested.
         """Check availability for a specific service on a given date."""
         try:
             # Find the service
-            service_info = find_service_by_name(service)
-            
+            service_info = find_service_by_name(service, context.session.active_services)
+
             if not service_info:
-                services = get_all_services()
+                services = get_all_services(context.session.active_services)
                 available = ", ".join([s['title'] for s in services])
                 return f"I couldn't find '{service}'. Available services: {available}"
-            
+
             iso = parse_datetime(date, "12:00 PM")
             dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
             now_local = datetime.now(ZoneInfo("Asia/Kolkata"))
@@ -1468,9 +1473,9 @@ Stop suggesting the moment user sounds even slightly disinterested.
         """
         try:      
             # Find the service
-            service_info = find_service_by_name(service)
+            service_info = find_service_by_name(service, context.session.active_services)
             if not service_info:
-                services = get_all_services()
+                services = get_all_services(context.session.active_services)
                 available = ", ".join([s['title'] for s in services])
                 return f"I couldn't find '{service}'. Available services: {available}"
 
@@ -1574,9 +1579,9 @@ Stop suggesting the moment user sounds even slightly disinterested.
                 return "I couldn't cancel your existing booking."
 
             # Find the service
-            service_info = find_service_by_name(service)
+            service_info = find_service_by_name(service, context.session.active_services)
             if not service_info:
-                services = get_all_services()
+                services = get_all_services(context.session.active_services)
                 available = ", ".join([s['title'] for s in services])
                 return f"I couldn't find '{service}'. Available services: {available}"
 
@@ -1729,14 +1734,55 @@ async def log_conversation(
 
     duration_seconds = int(time.monotonic() - call_start)
 
+    await asyncio.sleep(2.5)  # ✅ wait for chat_ctx to flush final messages before reading
+
     # ── 1. Extract transcript (user + assistant only, strip [INTERNAL]) ────
     messages = []
     try:
-        for msg in session.chat_ctx.messages:
+        raw_history = None
+        for attr in ["history", "chat_ctx", "_chat_ctx", "_history"]:
+            val = getattr(session, attr, None)
+            if val is None:
+                continue
+            # Unwrap callable up to 2 levels deep (some SDK versions double-wrap)
+            for _ in range(2):
+                if callable(val):
+                    try:
+                        val = val()
+                    except Exception:
+                        val = None
+                        break
+                else:
+                    break
+            if val is None:
+                continue
+            raw_history = val
+            logger.info(f"transcript: found history via '{attr}', type={type(val).__name__}, has_messages={hasattr(val, 'messages')}")
+            break
+
+        # Unwrap .messages — handle it being a method OR a property
+        if raw_history is not None:
+            raw_messages = getattr(raw_history, "messages", None)
+            # If .messages is a method, call it
+            if callable(raw_messages):
+                try:
+                    raw_messages = raw_messages()
+                except Exception:
+                    raw_messages = None
+            # If still None, try iterating raw_history directly
+            if raw_messages is None:
+                raw_messages = list(raw_history) if hasattr(raw_history, "__iter__") else []
+            else:
+                raw_messages = list(raw_messages)
+            logger.info(f"transcript: message count = {len(raw_messages)}")
+        else:
+            raw_messages = []
+            logger.warning("transcript: could not find history — tried history, chat_ctx, _chat_ctx, _history")
+
+        for msg in raw_messages:
             role = getattr(msg, "role", "unknown")
             role_str = role.value if hasattr(role, "value") else str(role)
 
-            # Only keep actual spoken dialogue
             if role_str not in ("user", "assistant"):
                 continue
 
@@ -1749,16 +1795,17 @@ async def log_conversation(
             else:
                 content_str = str(raw_content)
 
-            # Strip internal instructions from assistant messages
             content_str = content_str.strip()
             if content_str.startswith("[INTERNAL]") or content_str.startswith("[SYSTEM NOTE]"):
                 continue
-            # Also strip trailing [INTERNAL] notes mid-content
             if "[INTERNAL]" in content_str:
                 content_str = content_str[:content_str.index("[INTERNAL]")].strip()
 
             if content_str:
                 messages.append({"role": role_str, "content": content_str})
+
+        logger.info(f"transcript: extracted {len(messages)} user/assistant messages")
+
     except Exception as e:
         logger.warning(f"log_conversation: could not extract chat messages — {e}")
 
@@ -1772,13 +1819,25 @@ async def log_conversation(
     except Exception as e:
         logger.warning(f"log_conversation: could not read FSM — {e}")
 
-    # Read from live ctx first, fall back to _last_* saved before reset
+    # Read from completed_ctx, dropped snapshot, live ctx, then _last_* fallbacks
     def fsm_get(attr, fallback_attr=None, default=None):
-        # Try live ctx
+        # 1. completed_ctx — set after successful booking/cancel/reschedule
+        completed = getattr(fsm, "completed_ctx", None) if fsm else None
+        if completed is not None:
+            val = getattr(completed, attr, None)
+            if val is not None:
+                return val
+        # 2. _dropped_ctx_snapshot — snapshotted at moment of disconnect (dropped calls)
+        dropped = getattr(fsm, "_dropped_ctx_snapshot", None) if fsm else None
+        if dropped is not None:
+            val = getattr(dropped, attr, None)
+            if val is not None:
+                return val
+        # 3. live ctx
         val = getattr(fsm_ctx, attr, None) if fsm_ctx else None
         if val is not None:
             return val
-        # Try saved _last_* on fsm object itself
+        # 4. _last_* saved on fsm object before FSM reset
         if fsm and fallback_attr:
             val = getattr(fsm, fallback_attr, None)
             if val is not None:
@@ -1810,9 +1869,8 @@ async def log_conversation(
             if service_info:
                 # Price is in description field as "Price: $X" or similar
                 desc = service_info.get("description", "")
-                if desc and "price" in desc.lower():
-                    import re as _re
-                    price_match = _re.search(r"[\$₹]?\s*(\d+(?:\.\d+)?)", desc, _re.IGNORECASE)
+                if desc:
+                    price_match = _re.search(r"[\$₹]\s*(\d+(?:\.\d+)?)", desc, _re.IGNORECASE)
                     if price_match:
                         amount = float(price_match.group(1))
     except Exception as e:
@@ -1827,7 +1885,7 @@ async def log_conversation(
         outcome = "rescheduled"
     elif call_type == "cancel_all":
         outcome = "cancelled"
-    elif messages:
+    elif messages or (call_type and call_type != "unknown"):
         outcome = "enquiry"
     else:
         outcome = "dropped"
@@ -1978,8 +2036,8 @@ async def my_agent(ctx: JobContext):
 
     # ── Fetch Cal.com event types, then filter to project-configured services ─
     await fetch_event_types()
-    filter_services_by_project(agent_config)  # Phase 3: narrow to project's service list
-    logger.info(f"Active services for this session: {[s['title'] for s in get_all_services()]}")
+    active_services = filter_services_by_project(agent_config)  # ✅ per-session list, never mutates global
+    logger.info(f"Active services for this session: {[s['title'] for s in active_services]}")
 
     # ── Initialize FSM ─────────────────────────────────────────────────────
     fsm_instance = FSM()
@@ -2028,6 +2086,7 @@ async def my_agent(ctx: JobContext):
 
     # Attach FSM to session for access in tools
     session.fsm = fsm_instance
+    session.active_services = active_services  # ✅ per-session service list
 
     # Attach project config to session so tools/handlers can access it if needed
     session.agent_config = agent_config
@@ -2062,17 +2121,30 @@ async def my_agent(ctx: JobContext):
 
     # ── Phase 5: Register disconnect handler to log the conversation ───────
     # We capture the variables we need via closure.
+    # FIXED:
     @ctx.room.on("participant_disconnected")
     def on_participant_disconnected(participant):
-        # Only fire for the human participant (not the agent itself)
-        if getattr(participant, "kind", None) != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT:
-            logger.info(
-                f"📴 Participant disconnected: {participant.identity!r} — "
-                "scheduling conversation log."
+        if getattr(participant, "kind", None) == rtc.ParticipantKind.PARTICIPANT_KIND_AGENT:
+            return  # ignore agent self-disconnect
+
+        logger.info(f"📴 Participant disconnected: {participant.identity!r} — scheduling conversation log.")
+
+        # ✅ Cancel silence monitor immediately so it doesn't fire after disconnect
+        sm = getattr(session, "silence_monitor", None)
+        if sm:
+            sm.cancel()
+
+        # ✅ Snapshot FSM context RIGHT NOW before session teardown
+        fsm = getattr(session, "fsm", None)
+        if fsm and fsm.ctx:
+            import copy
+            fsm._dropped_ctx_snapshot = copy.copy(fsm.ctx)
+
+        asyncio.ensure_future(
+            asyncio.shield(
+                log_conversation(session, project_id, agent_config, call_start, call_start_dt)
             )
-            asyncio.ensure_future(
-                log_conversation(session, project_id, agent_config, call_start,call_start_dt)
-            )
+        )
 
     # ── Phase 2: Dynamic greeting from project config ─────────────────────
     # The Assistant stores the greeting it computed from agent_config.

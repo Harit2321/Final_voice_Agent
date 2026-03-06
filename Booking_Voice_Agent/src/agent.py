@@ -2049,7 +2049,7 @@ async def my_agent(ctx: JobContext):
 
     # ── Phase 4: Resolve voice ID from project config ──────────────────────
     # Default voice: Ishan (warm Indian English male, Cartesia sonic-3)
-    DEFAULT_VOICE_ID = "2b035a4d-c001-49a7-8505-f050c4250d97"
+    DEFAULT_VOICE_ID = "shubh"
     voice_id = (
         (agent_config or {}).get("voiceId") or DEFAULT_VOICE_ID
     )
@@ -2078,8 +2078,8 @@ async def my_agent(ctx: JobContext):
         tts=sarvam.TTS(
             target_language_code="hi-IN",
             model="bulbul:v3-beta",
-            speaker="shubh",
-            pace=1.1,
+            speaker=voice_id,
+            pace=1.13,
         ),
         # tts=resemble.TTS(
         #     voice_uuid="c99f388c",

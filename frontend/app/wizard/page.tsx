@@ -54,10 +54,10 @@ export default function WizardPage() {
     ]);
 
     const voices = [
-        { id: '6303e5fb-a0a7-48f9-bb1a-dd42c216dc5d', emoji: '👩', name: 'Sagar', style: 'Warm · Professional', audioFile: '/voices/Sagar.wav' },
-        { id: 'fd2ada67-c2d9-4afe-b474-6386b87d8fc3', emoji: '👱‍♀️', name: 'Ishan', style: 'Crisp · Confident', audioFile: '/voices/Ishan.wav' },
-        { id: 'faf0731e-dfb9-4cfc-8119-259a79b27e12', emoji: '👨', name: 'Riya', style: 'Deep · Trustworthy', audioFile: '/voices/Riya.wav' },
-        { id: '95d51f79-c397-46f9-b49a-23763d3eaa2d', emoji: '🧑', name: 'Jia', style: 'Energetic · Friendly', audioFile: '/voices/Jia.wav' },
+        { id: 'shubh', emoji: '👨', name: 'Shubh', style: 'Warm · Professional', audioFile: '/voices/Shubh.wav' },
+        { id: 'ashutosh', emoji: '🧑', name: 'Ashutosh', style: 'Crisp · Confident', audioFile: '/voices/Ashutosh.wav' },
+        { id: 'roopa', emoji: '👩', name: 'Riya', style: 'Deep · Trustworthy', audioFile: '/voices/Roopa.wav' },
+        { id: 'shreya', emoji: '👱', name: 'Shreya', style: 'Energetic · Friendly', audioFile: '/voices/Shreya.wav' },
     ];
 
     const playVoice = (voiceId: string, audioFile: string) => {

@@ -59,7 +59,7 @@ export async function createCalComEventType(service: Service): Promise<{ success
             title: service.name,
             slug,
             length: service.duration,
-            description: service.price ? `Price: $${service.price}` : undefined,
+            description: service.price ? `₹${service.price}` : undefined,
 
             // Phone call location (this auto-creates phone field)
             locations: [
@@ -142,7 +142,7 @@ async function createCalComEventTypeV1(service: Service): Promise<{ success: boo
                 title: service.name,
                 slug: slug,
                 length: service.duration,
-                description: service.price ? `Price: $${service.price}` : undefined,
+                description: service.price ? `₹${service.price}` : undefined,
                 locations: [
                     {
                         type: 'phone',
@@ -166,7 +166,7 @@ async function createCalComEventTypeV1(service: Service): Promise<{ success: boo
 
             })
         });
-
+        
         const data = await response.json();
         console.log('V1 API response:', data);
 

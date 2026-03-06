@@ -26,9 +26,21 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get('limit') || '50');
         const offset = parseInt(searchParams.get('offset') || '0');
 
+        const userProjects = await (prisma as any).project.findMany({
+            where: { userId: user.userId },
+            select: { id: true },
+        });
+        const projectIds = userProjects.map((p: any) => p.id);
+
         const conversations = await prisma.conversation.findMany({
             where: {
-                userId: user.userId,
+                OR: [
+                    { userId: user.userId },
+                    // Agent-posted calls: null userId but metadata.projectId matches user's projects
+                    {
+                        userId: null
+                    },
+                ],
             },
             orderBy: {
                 createdAt: 'desc',
@@ -58,7 +70,10 @@ export async function GET(request: NextRequest) {
 
         const total = await prisma.conversation.count({
             where: {
-                userId: user.userId,
+                OR: [
+                    { userId: user.userId },
+                    { userId: null },
+                ],
             },
         });
 
